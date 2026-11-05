@@ -1,7 +1,7 @@
 import metadata from '~/generated/images.json'
 
 // Milestone 2 can supply a verified CDN origin while retaining these keys.
-export function useImages(origin = '') {
+export function useImages(origin = ('origin' in metadata ? String(metadata.origin) : '')) {
   const url = (key: string) => `${origin.replace(/\/$/, '')}/${key}`
   return metadata.images.map(image => ({
     id: image.id,

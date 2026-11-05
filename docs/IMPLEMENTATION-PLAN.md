@@ -1,9 +1,10 @@
 # Boring Flat Girl — implementation roadmap
 
-Planning baseline: November 5, 2026. Milestone 1 is locally verified; milestones 2–6 are pending.
+Planning baseline: November 5, 2026. Milestones 1–2 are locally verified;
+milestone 2 live rollout and milestones 3–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
-in their respective future sessions. No infrastructure has been inspected live
-or changed as part of this work.
+in their respective sessions. Milestone 2 included read-only AWS discovery;
+no infrastructure has been changed by the agent.
 
 Milestone 1 is now a minimal technical scaffold. Its
 [detailed implementation plan](milestone-1-plan.md) was approved;
@@ -128,7 +129,11 @@ shows the exact heading and both carousel images, and passes the local image
 pipeline checks. Final content, styling, branding, imagery and social metadata
 are explicitly deferred to milestone 6. No public production signup is implied.
 
-### 2. AWS beta/production hosting, separate images, and local deployment — roughly 6–10 hours
+### 2. AWS beta/production hosting, separate images, and local deployment — about 30 minutes local implementation target
+
+**Status:** [detailed plan](milestone-2-plan.md) approved November 5, 2026.
+Local implementation/checks are complete. AWS discovery was read-only;
+[the rollout runbook](../cloud/DEPLOYMENT.md) remains user-run and unverified.
 
 **Outcome:** the user can deploy and verify `beta.flatgirl.net` and `flatgirl.net`
 from their machine, with independent site buckets/distributions and shared images.

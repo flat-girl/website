@@ -1,0 +1,13 @@
+{
+  "name": "flat-girl-infrastructure", "private": true, "type": "module",
+  "scripts": {
+    "cdk": "cdk", "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "synth": "cdk synth --quiet",
+    "synth:example": "cdk synth --context projectConfig=project.example.json --output cdk.out/example --quiet",
+    "check": "npm run typecheck && npm test && npm run synth:example"
+  },
+  "engines": {"node": ">=24.18.0 <25"},
+  "dependencies": {"aws-cdk-lib": "2.275.0", "constructs": "10.8.1"},
+  "devDependencies": {"@types/node": "24.19.2", "aws-cdk": "2.1147.0", "tsx": "4.23.15", "typescript": "6.0.3"}
+}

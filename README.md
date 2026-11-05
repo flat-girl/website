@@ -20,7 +20,8 @@ npm run dev --prefix web
 Open the localhost URL printed by Nuxt. Both dev and generate prepare images
 automatically. On a new checkout, first restore the two supplied originals into
 `images/raw/` using the filenames recorded in `images/manifest.json`; these files
-are intentionally excluded from Git. Private source storage comes in milestone 2.
+are intentionally excluded from Git. After provisioning the image stack, restore
+them with `make sources-pull PROFILE=flat-girl`.
 
 ## Static build and preview
 
@@ -58,8 +59,8 @@ uv run --locked --project tools python tools/prepare_images.py --refresh-manifes
 ```
 
 Review and commit the manifest diff; never commit raw/processed image directories.
-Keep old published variants for rollback. CDN uploads and verified CDN URL mapping
-will be added in milestone 2.
+Keep old published variants for rollback. [Shared image commands](cloud/IMAGES.md)
+now provide conditional CDN uploads and verified URL receipts.
 
 ## Checks
 
@@ -77,12 +78,21 @@ content, and failed asset requests. Run generation before the browser checks.
 
 ## Deployment plan
 
-Milestone 2 adds separate beta (`beta.flatgirl.net`, Basic Auth/noindex) and
+Milestone 2 defines separate beta (`beta.flatgirl.net`, Basic Auth/noindex) and
 production (`flatgirl.net`) S3/CloudFront sites, plus shared image hosting.
 Milestone 5 adds GitHub deployment:
 
 - Push to `main`: deploy beta only when `DEV_DEPLOY_ENABLED=true`.
 - Publish a non-prerelease GitHub release: deploy its exact tagged commit to production.
 
-AWS resources and GitHub deployment workflows are not implemented yet. Until
-those workflows are verified, live rollout remains user-run.
+Milestone 2 infrastructure and local deployment commands are implemented; live
+rollout remains user-run and unverified. Start with [AWS access](cloud/ACCESS.md),
+then [deployment and rollback](cloud/DEPLOYMENT.md). GitHub automation stays in
+milestone 5. See the [milestone 2 plan](docs/milestone-2-plan.md).
+
+Run `make help` for local AWS commands. Targets call the Python tools through uv:
+
+```sh
+make images-check PROFILE=flat-girl
+make site-publish PROFILE=flat-girl-beta SITE_ENV=beta DRY_RUN=1
+```

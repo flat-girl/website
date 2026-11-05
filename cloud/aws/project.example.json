@@ -1,0 +1,5 @@
+{
+  "account": "111111111111", "region": "us-east-1", "hostedZoneId": "ZEXAMPLE",
+  "domain": "flatgirl.net", "operatorPrincipalArn": "arn:aws:iam::111111111111:role/ExampleOperator",
+  "betaEnabled": true, "productionNoindex": true
+}

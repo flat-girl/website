@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test, installImageFixture } from './image-fixture'
 
 for (const width of [375, 1280]) {
   test(`carousel and image requests at ${width}px`, async ({ page, context }, testInfo) => {
@@ -42,6 +43,7 @@ for (const width of [375, 1280]) {
 
 test('dense phone display selects the larger variant', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 375, height: 900 }, deviceScaleFactor: 2 })
+  await installImageFixture(context)
   const page = await context.newPage()
   await page.goto('http://127.0.0.1:3000/')
   const front = page.getByAltText('Sarah, front view')
@@ -52,6 +54,7 @@ test('dense phone display selects the larger variant', async ({ browser }) => {
 
 test('HTML remains useful without JavaScript', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false })
+  await installImageFixture(context)
   const page = await context.newPage()
   await page.goto('http://127.0.0.1:3000/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Boring Flat Girl')
