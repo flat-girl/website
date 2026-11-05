@@ -1,0 +1,22 @@
+{
+  "images": [
+    {
+      "id": "sarah-front",
+      "file": "sarah_front_no_outline_v3.9.2.png",
+      "alt": "Sarah, front view",
+      "sha256": "40ef36889854d664c4fffd18572981420fb2bca015cdba4066643fdc23433c8f",
+      "bytes": 3507039,
+      "width": 1696,
+      "height": 2528
+    },
+    {
+      "id": "sarah-back",
+      "file": "sarah_back_no_outline_v3.2.2.png",
+      "alt": "Sarah, back view",
+      "sha256": "7b5d9204fcfde96843ad71bcda337f21b3b98702c0c6c3fc3a766232f1d18470",
+      "bytes": 2527557,
+      "width": 1696,
+      "height": 2528
+    }
+  ]
+}

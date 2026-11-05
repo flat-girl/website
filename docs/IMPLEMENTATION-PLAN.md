@@ -1,9 +1,14 @@
 # Boring Flat Girl — implementation roadmap
 
-Planning baseline: November 5, 2026. All five milestones are pending.
+Planning baseline: November 5, 2026. Milestone 1 is locally verified; milestones 2–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective future sessions. No infrastructure has been inspected live
-or changed as part of this planning work.
+or changed as part of this work.
+
+Milestone 1 is now a minimal technical scaffold. Its
+[detailed implementation plan](milestone-1-plan.md) was approved;
+local implementation and checks are complete. See its handoff for results.
+Nothing is deployed. Final landing-page work moves to milestone 6.
 
 ## Product and scope
 
@@ -37,9 +42,9 @@ notification or enable sales.
 | Reference | Reuse | Adaptation required |
 | --- | --- | --- |
 | `/Users/brucewilcoxon/BigNaturalsFoodCo/website/web/` | Nuxt static generation, TypeScript, Tailwind, accessible signup form and browser tests | Product-page layout, Flat Girl branding, metadata, copy, and image integration |
-| Big Naturals `cloud/aws/` and `cloud/` runbooks | CDK, private S3/OAC/CloudFront, DNS/TLS, API/Lambda, SSM secrets, publication and verification scripts | Dedicated project configuration and resources; manual-first setup and permissions |
-| Big Naturals `.github/workflows/deploy.yml` | Build artifact promotion, OIDC, main-only deployment, serialization and public verification | Flat Girl repository trust, image preparation, and first successful workflow validation |
-| `/Users/brucewilcoxon/Polis/2045-FishLamps/Site/` | Separate private originals and public image variants, immutable image CDN, local image mode, manifest/recipes and verification receipt | Extract the image subsystem without archive/reviews, beta hosting, Shopify migration or unrelated application features |
+| Big Naturals `cloud/aws/` and `cloud/` runbooks | CDK, private S3/OAC/CloudFront, DNS/TLS, API/Lambda, SSM secrets, publication and verification scripts | Dedicated project configuration and resources; manual-first setup and permissions; separate beta and production hosting |
+| Big Naturals `.github/workflows/deploy.yml` | Build artifact promotion, OIDC, gated deployments, serialization and public verification | Flat Girl trust, main-to-beta gate, release-to-production trigger, image preparation and live verification |
+| `/Users/brucewilcoxon/Polis/2045-FishLamps/Site/` | Separate private originals and public image variants, immutable image CDN, local image mode, manifest/recipes and verification receipt | Reuse the image subsystem and separate beta/production hosting pattern; omit archive/reviews and Shopify migration |
 
 Big Naturals' checked-in notes report successful local static hosting, but
 signup recovery and GitHub integration verification remain pending. Treat that
@@ -94,40 +99,51 @@ implementation use separate sessions, save the detailed plan first. The estimate
 below are rough hands-on planning/implementation time, excluding asset creation,
 account setup, user review, DNS propagation, and external deployment delays.
 
-### 1. Nuxt static product landing page — roughly 4–8 hours
+### 1. Nuxt static hello world and image carousel — target about 20 minutes
 
-**Outcome:** a locally reviewable product page and successful static build.
+**Outcome:** a plain, locally reviewable page with `<h1>Boring Flat Girl</h1>`,
+a Sarah front/back carousel, and a successful static build ready for AWS hosting.
 
-1. Establish `web/`, pinned dependencies/lockfile, local commands, and a small
+1. Establish `web/` with Nuxt, TypeScript, Tailwind, pinned dependencies/lockfile,
+   local commands, and a small
    public configuration contract independent of deployed AWS resources.
-2. Build the responsive product layout: hero/gallery, product description,
-   500-unit Black Friday announcement, Christmas arrival promise, FAQs, and
-   email CTA. Define brand direction and identify missing product assets/facts.
+2. Render only the heading and an accessible two-image carousel using the
+   supplied Sarah front/back PNGs. Use plain HTML controls and minimal styling.
+   No marketing copy, signup form, branding, or final product layout in this step.
 3. Define the image manifest/recipes and URL abstraction using FishLamps as
-   the reference. Start with local prepared images; production CDN support is
-   completed in milestone 2. Label temporary assets in handoff notes.
-4. Implement accessible form presentation with honest unavailable behavior
-   until milestone 3. Never simulate successful subscription in application code.
-   Add canonical/social metadata, favicon, responsive image sizing and alt text.
-5. Check type safety, static generation, mobile/desktop layout, keyboard access,
-   and useful content without JavaScript. Document privacy/tracking UI locations
-   so later integrations fit the design.
+   the architectural reference. Implement resizing in `tools/` with Python, uv,
+   and Pillow. Separate `images/raw/` from `images/processed/`; generate 480px,
+   960px, and native-resolution WebPs with a full-size link in the carousel.
+   Keep raw images outside Git and site/CDN uploads. Production CDN support
+   and separate private-source storage are completed in milestone 2.
+4. Generate prerendered HTML, JS, CSS and prepared local images into
+   `web/.output/public`. Document the static artifact contract for milestone 2;
+   no deployed Nuxt server is required.
+5. Check type safety, static generation, image preparation, mobile/desktop layout,
+   keyboard controls, and a useful no-JavaScript fallback. Record exact commands
+   and results in the detailed plan/handoff.
 
-**Done when:** the generated site previews locally, contains no price/cart,
-communicates the notification offer accurately, and has a documented asset list.
-Final photography can remain an explicit launch blocker without blocking the
-technical scaffold. No public production signup is implied at this stage.
+**Done when:** the generated site previews from an ordinary static file server,
+shows the exact heading and both carousel images, and passes the local image
+pipeline checks. Final content, styling, branding, imagery and social metadata
+are explicitly deferred to milestone 6. No public production signup is implied.
 
-### 2. AWS hosting, separate images, and local deployment — roughly 6–10 hours
+### 2. AWS beta/production hosting, separate images, and local deployment — roughly 6–10 hours
 
-**Outcome:** the user can deploy and verify `flatgirl.net` from their machine.
+**Outcome:** the user can deploy and verify `beta.flatgirl.net` and `flatgirl.net`
+from their machine, with independent site buckets/distributions and shared images.
 
 1. Confirm AWS account/profile, region, domain registrar/DNS authority and
    hosted zone. Prepare Flat Girl access/site/image stacks and project config.
-   Use private versioned S3, CloudFront OAC, HTTPS certificates and canonical
-   redirects; preserve unrelated DNS records. Prefer `us-east-1` for parity with
+   Model separate beta and production stacks on Waller Creek High: beta at
+   `beta.flatgirl.net`, protected with Basic Auth and noindex; production at
+   `flatgirl.net`. Keep beta credentials out of Git, build artifacts, and logs.
+   Shared certificates/images must not depend on the beta stack, so disabling
+   beta cannot break production. Use private versioned S3, CloudFront OAC, HTTPS
+   certificates and canonical redirects; preserve unrelated DNS records. Prefer `us-east-1` for parity with
    the reference and CloudFront certificate requirements.
-2. Adapt the FishLamps source/variant workflow: private originals, separate
+2. Adapt the FishLamps source/variant workflow around milestone 1's Python/uv
+   image tool and raw/processed separation: private originals, separate
    variant bucket/CDN, checksummed manifests/recipes, missing-only generation,
    conditional immutable uploads, and a verified build receipt. Preserve old
    variants for old pages and rollback. No transformation server is required.
@@ -145,9 +161,9 @@ technical scaffold. No public production signup is implied at this stage.
    failing action at a time. The user executes rollout; verify public HTTPS,
    redirects, image delivery, cache headers and build contents afterward.
 
-**Done when:** an actual user-run deployment serves the expected build and
-images, originals are inaccessible publicly, a second unchanged image run
-performs no rendering/uploads, and rollback instructions are recorded.
+**Done when:** user-run deployments serve the expected build and images on
+beta and production, beta authentication works, originals are inaccessible
+publicly, a second unchanged image run performs no rendering/uploads, and rollback instructions are recorded.
 Passing synthesis or IAM simulation alone is not deployment verification.
 
 ### 3. Turnstile and Brevo signup — roughly 4–8 hours
@@ -165,7 +181,7 @@ Passing synthesis or IAM simulation alone is not deployment verification.
    acceptance responses that do not reveal membership. Default to single opt-in
    as in Big Naturals; record consent source/time and text version through an
    agreed Brevo configuration without overwriting historical consent.
-4. Connect the form with submitting/success/error states, accessible feedback,
+4. Add a minimal accessible form to the scaffold and connect submitting/success/error states, accessible feedback,
    token expiry/reset, retry and timeout handling. Define practical throttling
    for expected advertising bursts instead of inheriting Big Naturals' small
    shared limit blindly. Keep secrets and contact payloads out of logs/builds.
@@ -210,42 +226,79 @@ no Meta requests occur before consent under this baseline, and signup still work
 when tracking is refused or blocked. Browser tracking cannot guarantee complete
 measurement. Conversions API and server/browser event deduplication are deferred.
 
-### 5. GitHub workflow deployments — roughly 4–8 hours
+### 5. GitHub beta and release deployments — roughly 4–8 hours
 
-**Outcome:** verified main-branch deployments replace routine local publication.
+**Outcome:** pushes to main deploy beta when enabled; publishing a production
+release deploys its exact tagged commit to production.
 
-1. Confirm the GitHub repository and its actual OIDC subject format. Configure
-   a project deployment role restricted to the repository/main and expected
-   audience. Keep IAM administration separate from routine deployments.
-2. Add PR checks for frontend generation, infrastructure, image planning and
-   signup/Pixel behavior. PRs use offline fixtures and test providers, obtain no
-   production credentials, and perform no AWS image writes or real signups.
-3. On eligible main runs, prepare/verify images once, generate against that exact
-   receipt, and retain the resulting static artifact. Deploy required stacks and
-   publish that checked artifact. Bootstrap resources/permissions manually first;
-   reuse local scripts instead of maintaining a second deployment implementation.
-4. Add provider-secret transfer to SSM, deployment serialization, outdated-run
-   rejection, account checks, pinned Actions and useful failure output without
-   secrets. Preserve the manual deployment/recovery path and keep local/GitHub
-   secret values aligned. Define safe ordering for future API/frontend changes.
-5. Verify checks on the intended revision before the production rollout, then
-   observe one complete GitHub OIDC deployment and verify HTTPS, images, form and
-   Pixel behavior. Document rollback and whether a failed verification happened
-   before or after publication. Do not equate a green build with a live deployment.
+1. Adapt Waller Creek High's separate site roles and deployment flags, with this
+   trigger contract (its current workflow deploys both sites from main; do not
+   copy that behavior):
 
-**Done when:** one real workflow has deployed the intended revision and passed
-public checks. Until then, the user continues deploying locally. Checkout and
-Black Friday sales activation remain outside these five milestones.
+   | Event | Destination | Condition |
+   | --- | --- | --- |
+   | Pull request | Checks only | No production credentials or writes |
+   | Push to `main` | `beta.flatgirl.net` | Repository variable `DEV_DEPLOY_ENABLED == 'true'` |
+   | GitHub `release: published` | `flatgirl.net` | Published, non-draft, non-prerelease release |
+
+   Missing/false dev flag skips beta deployment. A main push never deploys
+   production, and a tag push alone is not a release. Publishing an eligible
+   release is the production deployment action.
+2. Confirm repository identity and actual OIDC subjects. Use separate GitHub
+   environments/roles for beta and production, restricted to the repository and
+   intended environment. Validate event/ref separately: beta must be main;
+   production must use the release tag's resolved SHA, reachable from main.
+   Reject moved tags or stale runs. Keep IAM administration out of deployment roles.
+3. Run frontend, Python/uv image, infrastructure, and applicable signup/Pixel
+   checks on the exact commit. PRs use offline fixtures/test providers. Deployment
+   runs prepare and verify images, build with environment-specific public settings,
+   and publish that checked static artifact. Do not rebuild a newer main revision
+   during release deployment. Beta tracking stays off; use test signup settings.
+4. Bootstrap manually, then reuse local publication scripts in CI. Pin Actions,
+   serialize deployments per destination, reject outdated beta runs, retain old
+   assets and release artifacts for rollback, and preserve manual recovery. A
+   disabled beta must not prevent release deployment or shared image preparation.
+5. Verify one main push with the dev flag on, one with it off, and one published
+   release. Confirm the deployed SHA and public HTTPS/images on each destination;
+   verify forms/tracking where enabled. Check that draft/prerelease/tag-only events
+   and ordinary main pushes cannot publish production. Record rollback commands.
+
+**Done when:** gated beta and release-based production deployments have both
+been observed and verified. Until then, the user deploys locally. Checkout and
+Black Friday sales activation remain outside these six milestones.
+
+### 6. Final landing-page content, style, branding, and images — roughly 4–8 hours
+
+**Outcome:** a finished product landing page ready for launch review, replacing
+the hello-world presentation. This is a launch requirement; it can begin earlier
+once assets and product facts are ready, without renumbering milestones 2–5.
+
+1. Confirm brand direction, final product images, product facts, release
+   date/time, shipping destinations, and Christmas-arrival guarantee terms.
+2. Build the responsive product layout: hero/gallery, description, product
+   details, 500-unit drop announcement, FAQs, and “Notify me when it drops” CTA.
+3. Integrate the working signup and consent controls from milestones 3–4 into
+   the final layout, including privacy information and failure/retry states.
+4. Replace pipeline test imagery as appropriate; finalize responsive recipes,
+   alt text, favicon, canonical/social metadata, and social preview imagery.
+5. Review mobile/desktop presentation, keyboard access, no-JavaScript content,
+   performance, and live image/signup/tracking behavior through the established
+   deployment process. Resolve missing content/assets before public promotion.
+
+**Done when:** approved content and assets are deployed and verified, the offer
+is accurate, signup and consent work in the final design, and no placeholder
+branding or test-only presentation remains. Sales activation and sending the
+launch campaign remain separate operational work.
 
 ## Decisions to resolve in the appropriate session
 
 | Decision | Needed by | Current position |
 | --- | --- | --- |
-| Product photos, brand direction, dimensions/materials and included items | Milestone 1 | Product facts/assets still needed; use explicit temporary content for local review |
-| Release year/time, eligible destinations and arrival guarantee cutoff | Milestone 1 copy / before launch | 500 units; provisional November 27, 2026; arrival before Christmas confirmed |
+| Product photos, brand direction, dimensions/materials and included items | Milestone 6 | Supplied Sarah front/back images test milestone 1's pipeline; final assets/facts deferred |
+| Release year/time, eligible destinations and arrival guarantee cutoff | Milestone 6 / before launch | 500 units; provisional November 27, 2026; arrival before Christmas confirmed |
 | AWS account, domain DNS, operator access and dedicated image library | Milestone 2 | Discover/confirm; do not inherit other projects' resource identities |
 | Brevo/Cloudflare ownership, list/widget, consent and notification sender | Milestone 3 | Dedicated Flat Girl audience/widget; single opt-in proposed |
-| Meta ownership/Pixel ID, privacy markets, GitHub repository and trust | Milestones 4–5 | Browser Pixel with opt-in baseline; main-only OIDC deployment proposed |
+| Meta ownership/Pixel ID, privacy markets, GitHub repository and trust | Milestones 4–5 | Browser Pixel with opt-in baseline; main-to-beta dev gate and release-to-production deployment |
 
 ## Session handoff protocol
 

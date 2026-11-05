@@ -1,0 +1,32 @@
+{
+  "name": "boring-flat-girl",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.18.0 <25" },
+  "scripts": {
+    "images:prepare": "uv run --locked --project ../tools python ../tools/prepare_images.py",
+    "images:check": "uv run --locked --project ../tools python ../tools/prepare_images.py --check",
+    "test:images": "uv run --locked --project ../tools python -m unittest discover -s ../tools/tests",
+    "predev": "npm run images:prepare",
+    "dev": "nuxt dev --host 127.0.0.1",
+    "pregenerate": "npm run images:prepare",
+    "generate": "nuxt generate",
+    "preview": "python3 -m http.server 3000 --bind 127.0.0.1 --directory .output/public",
+    "postinstall": "nuxt prepare",
+    "pretypecheck": "npm run images:prepare",
+    "typecheck": "nuxt typecheck",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "nuxt": "4.6.4",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "4.3.4",
+    "tailwindcss": "4.3.4",
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.14"
+  }
+}
