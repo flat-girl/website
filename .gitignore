@@ -1,0 +1,13 @@
+images/raw/
+images/processed/
+web/public/variants/
+web/app/generated/
+node_modules/
+.nuxt/
+.output/
+web/dist
+.venv/
+__pycache__/
+test-results/
+playwright-report/
+.DS_Store
