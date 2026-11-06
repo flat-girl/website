@@ -17,8 +17,9 @@ make beta-auth PROFILE=flat-girl
 ```
 
 Wait for certificate/DNS/CloudFront completion. An empty or unavailable auth store
-denies access. Credential setup prompts privately for a username and a generated
-24+ character password. Only its authorization digest reaches KVS. The AWS CLI
+denies access. Credential setup prompts privately for a username and password.
+There is no password-length minimum beyond requiring a nonempty value. Only its
+authorization digest reaches KVS. The AWS CLI
 adapter uses a mode-600 temporary JSON file, deleted on command completion, to
 keep the digest out of arguments/logs; it never writes the password. Ordinary
 stack updates preserve KVS contents.
@@ -28,6 +29,10 @@ Only project A/AAAA and ACM validation records are managed. Preserve existing
 MX, TXT, mail aliases, and domain delegation.
 
 ## 2. Import images and publish beta
+
+Ensure the `flat-girl-beta` CLI role profile is configured using
+[access setup](ACCESS.md). The deployed IAM role alone does not create that local
+profile.
 
 ```sh
 make sources-import PROFILE=flat-girl

@@ -72,7 +72,18 @@ aws login --profile flat-girl-human --region us-east-1
 aws sts get-caller-identity --profile flat-girl
 ```
 
-These profile names are runbook conventions, not files created by the agent.
+These are local CLI profiles; creating the IAM roles does not configure them on
+your machine. Create the beta publication profile before building/publishing beta:
+
+```sh
+aws configure set role_arn arn:aws:iam::066540957026:role/flat-girl-beta-publisher --profile flat-girl-beta
+aws configure set source_profile flat-girl --profile flat-girl-beta
+aws configure set region us-east-1 --profile flat-girl-beta
+aws sts get-caller-identity --profile flat-girl-beta
+```
+
+Before production, configure `flat-girl-production` with the production publisher
+role shown above and the same `source_profile` and region.
 Renew login when a session expires; role chaining can limit session duration.
 
 ## Permission boundaries

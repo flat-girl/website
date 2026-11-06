@@ -21,6 +21,11 @@ def bucket(p,kind): return f"flat-girl-{kind}-{p['account']}-{p['region']}"
 
 class AwsError(RuntimeError):
     def __init__(self,service,operation,error):
+        missing_profile=re.search(r'The config profile \(([^)\r\n]+)\) could not be found',error)
+        if missing_profile:
+            self.code='ProfileNotFound'
+            super().__init__(f"AWS CLI profile '{missing_profile.group(1)}' is not configured; see cloud/ACCESS.md for role-profile setup")
+            return
         match=re.search(r'\(([^)]+)\)',error)
         self.code=match.group(1) if match else 'CLIError'
         super().__init__(f'{service}.{operation} failed ({self.code}); check session, permissions and resource state')

@@ -13,7 +13,7 @@ from prepare_images import prepare,source_info,sha256,write_json
 from image_plan import plan,validate_receipt,install_receipt,IMMUTABLE
 from remote_images import ensure,remote_variant,immutable_upload,checksum64,restore
 from aws_common import AwsError,bucket
-from deploy_site import classify,file_manifest,publish_files,validate_artifact,archive,restore_release
+from deploy_site import classify,file_manifest,publish_files,validate_artifact,archive,restore_release,redirect_matches,check_redirect
 from image_plan import digest
 
 class FakeAWS:
@@ -35,6 +35,25 @@ def fixture(root):
     write_json(root/'images/recipes.json',dict(widths=[20,40],quality=85,fullQuality=90))
 
 class DeploymentTests(unittest.TestCase):
+    def test_redirects_ignore_key_order_but_preserve_destination_and_values(self):
+        expected='https://beta.flatgirl.net/?utm_source=check&x=1&x=2&empty='
+        actual='https://beta.flatgirl.net/?x=1&x=2&empty=&utm_source=check'
+        self.assertTrue(redirect_matches(actual,expected))
+        check_redirect('https://beta.flatgirl.net/offer',302,actual,302,expected)
+        self.assertTrue(redirect_matches('https://beta.flatgirl.net/?q=a%20b&plus=%2b',
+                                         'https://beta.flatgirl.net/?plus=%2B&q=a+b'))
+        for invalid in [None,expected.replace('https:','http:'),expected.replace('beta.flatgirl.net','other.example'),
+                        expected.replace('/?','/offer?'),expected+'#fragment',expected.replace('&x=2',''),
+                        expected.replace('x=1&x=2','x=2&x=1'),expected.replace('&empty=',''),
+                        expected+'&extra=1',expected.replace('check','changed')]:
+            with self.subTest(location=invalid):self.assertFalse(redirect_matches(invalid,expected))
+
+    def test_redirect_failure_reports_actual_status_and_location(self):
+        with self.assertRaisesRegex(ValueError,"received HTTP 401 Location None"):
+            check_redirect('https://beta.flatgirl.net/offer',401,None,302,'https://beta.flatgirl.net/')
+        with self.assertRaisesRegex(ValueError,"received HTTP 302 Location 'https://other.example/'"):
+            check_redirect('https://beta.flatgirl.net/offer',302,'https://other.example/',302,'https://beta.flatgirl.net/')
+
     def test_remote_reuse_receipt_and_build_without_originals(self):
         with tempfile.TemporaryDirectory() as d,contextlib.redirect_stdout(io.StringIO()):
             root=Path(d);fixture(root);local=prepare(root);expected=plan(root)

@@ -17,6 +17,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from aws_common import AWS,AwsError,bucket,project
 from image_plan import IMMUTABLE,digest
@@ -192,6 +193,32 @@ def beta_login():
     username=input('Beta username for verification: ').strip();password=getpass.getpass('Beta password: ')
     return 'Basic '+base64.b64encode((username+':'+password).encode()).decode()
 
+def redirect_matches(actual,expected):
+    """Compare destinations without depending on ordering between query keys.
+
+    Repeated values retain their order, and blank values must not disappear.
+    The scheme, authority, path and fragment still have to match exactly.
+    """
+    if not actual:return False
+    try:
+        actual_url=urllib.parse.urlsplit(actual)
+        expected_url=urllib.parse.urlsplit(expected)
+        if any(getattr(actual_url,key)!=getattr(expected_url,key) for key in ('scheme','netloc','path','fragment')):
+            return False
+        def query_values(query):
+            values={}
+            for key,value in urllib.parse.parse_qsl(query,keep_blank_values=True,strict_parsing=True,errors='strict'):
+                values.setdefault(key,[]).append(value)
+            return values
+        return query_values(actual_url.query)==query_values(expected_url.query)
+    except (ValueError,UnicodeError):
+        return False
+
+def check_redirect(url,status,actual_location,expected_status,expected_location):
+    if status!=expected_status or not redirect_matches(actual_location,expected_location):
+        raise ValueError(f'Redirect failed: {url}; expected HTTP {expected_status} Location {expected_location!r}; '
+                         f'received HTTP {status} Location {actual_location!r}')
+
 def verify(aws,env,directory):
     manifest=validate_artifact(directory,env,aws.p);out=destination(aws,env);origin=out['SiteUrl']
     verify_images(aws,manifest['images'])
@@ -219,7 +246,7 @@ def verify(aws,env,directory):
     if env=='production':probes.append(('https://www.'+aws.p['domain']+'/',301,origin+'/'))
     for url,expected,location in probes:
         status,headers,_=request(url,auth if url.startswith(origin+'/') or env=='beta' and url.startswith('https://'+out['DistributionDomainName']+'/') else None)
-        if status!=expected or headers.get('Location')!=location:raise ValueError(f'Redirect failed: {url}')
+        check_redirect(url,status,headers.get('Location'),expected,location)
     status,headers,_=request(origin.replace('https:','http:')+'/')
     if status not in (301,302,307,308) or headers.get('Location')!=origin+'/':raise ValueError('HTTP-to-HTTPS redirect failed')
     for path in ['/missing.js','/variants/missing.webp','/.env']:

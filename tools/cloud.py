@@ -39,10 +39,14 @@ def auth(aws):
     aws.writer()
     store=aws.outputs('beta')['AuthStoreArn']
     username=input('Beta username: ').strip()
-    password=getpass.getpass('Beta password (24+ characters from password manager): ')
+    password=getpass.getpass('Beta password: ')
     confirm=getpass.getpass('Repeat beta password: ')
-    if not username or ':' in username or any(c in username+password for c in '\r\n') or len(password)<24 or password!=confirm:
-        raise ValueError('Invalid username, short password, or confirmation mismatch')
+    if not username or ':' in username or any(c in username for c in '\r\n'):
+        raise ValueError('Enter a username without colons or line breaks')
+    if not password or any(c in password for c in '\r\n'):
+        raise ValueError('Enter a nonempty password without line breaks')
+    if password!=confirm:
+        raise ValueError('Passwords do not match')
     value='Basic '+base64.b64encode((username+':'+password).encode()).decode()
     digest=hashlib.sha256(value.encode()).hexdigest()
     description=aws.call('cloudfront-keyvaluestore','describe-key-value-store',KvsARN=store)

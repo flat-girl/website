@@ -152,7 +152,7 @@ be reviewed together.
    data or a lookup failure denies access; it never falls through to the site.
    Remove the Authorization header before forwarding an authenticated request.
 3. **Add private credential setup/rotation.** Prompt locally without echo, accept
-   a password-manager-generated high-entropy password, and store only a SHA-256
+   a nonempty password with no additional length minimum, and store only a SHA-256
    digest of the expected Basic Authorization value in KVS. Compute the same
    digest in the function and compare fixed-length values without early exit.
    This is shared preview access, not a customer authentication system. Keep
