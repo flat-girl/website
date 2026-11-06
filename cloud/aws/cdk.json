@@ -1,0 +1,1 @@
+{"app":"node --import tsx bin/app.ts","context":{"@aws-cdk/core:defaultCrossStackReferences":"strong"}}

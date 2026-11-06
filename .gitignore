@@ -11,3 +11,7 @@ __pycache__/
 test-results/
 playwright-report/
 .DS_Store
+.deploy/
+cloud/aws/cdk.out/
+cloud/aws/project.json
+cloud/aws/profiles.local.json

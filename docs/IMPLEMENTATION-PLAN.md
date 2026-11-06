@@ -1,14 +1,16 @@
 # Boring Flat Girl — implementation roadmap
 
-Planning baseline: November 5, 2026. Milestone 1 is locally verified; milestones 2–6 are pending.
+Planning baseline: November 5, 2026. Milestones 1–2 are complete;
+beta/production hosting is live-verified. Milestones 3–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
-in their respective future sessions. No infrastructure has been inspected live
-or changed as part of this work.
+in their respective sessions. Milestone 2 included read-only AWS discovery;
+no infrastructure has been changed by the agent.
 
 Milestone 1 is now a minimal technical scaffold. Its
 [detailed implementation plan](milestone-1-plan.md) was approved;
 local implementation and checks are complete. See its handoff for results.
-Nothing is deployed. Final landing-page work moves to milestone 6.
+The scaffold is deployed to beta and production. Final landing-page work remains
+milestone 6.
 
 ## Product and scope
 
@@ -128,7 +130,13 @@ shows the exact heading and both carousel images, and passes the local image
 pipeline checks. Final content, styling, branding, imagery and social metadata
 are explicitly deferred to milestone 6. No public production signup is implied.
 
-### 2. AWS beta/production hosting, separate images, and local deployment — roughly 6–10 hours
+### 2. AWS beta/production hosting, separate images, and local deployment — about 30 minutes local implementation target
+
+**Status:** complete November 5, 2026 after user-run rollout and live verification.
+See the [completion handoff](milestone-2-plan.md#live-completion-handoff--november-5-2026)
+and [operating runbook](../cloud/DEPLOYMENT.md). The user waived the live rollback
+drill and confirmed password rotation. Separate deployed resources establish beta
+independence; the live disable/re-enable drill was not observed.
 
 **Outcome:** the user can deploy and verify `beta.flatgirl.net` and `flatgirl.net`
 from their machine, with independent site buckets/distributions and shared images.
