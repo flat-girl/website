@@ -1,12 +1,14 @@
 # Boring Flat Girl
 
 Minimal Nuxt + Tailwind static site: a heading, Sarah front/back carousel,
-and full-size image links. Milestones 1–2 are complete; beta and production are
-deployed and verified. Production: <https://flatgirl.net>.
+full-size image links, and a working launch-notification form. Milestones 1–3
+are complete for their core scope; beta and production are deployed.
+Production: <https://flatgirl.net>.
 Final landing-page content and branding come later.
-Milestone 3 signup is implemented locally with beta list **5**, production list
-**4**, shared provider keys, and a Brevo-managed welcome email. Both environments
-start disabled until the [signup rollout](cloud/SIGNUP.md) is completed.
+Signup is enabled with beta list **5**, production list **4**, shared provider
+keys, and a Brevo-managed welcome email. See the [signup runbook](cloud/SIGNUP.md)
+and [milestone 3 completion handoff](docs/milestone-3-plan.md#completion-handoff--november-5-2026).
+Next: plan milestone 4, Meta Pixel and tracking consent.
 See the [roadmap](docs/IMPLEMENTATION-PLAN.md) and
 [milestone 1 plan](docs/milestone-1-plan.md).
 

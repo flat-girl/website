@@ -1,6 +1,9 @@
 # Milestone 3 — Turnstile and Brevo signup
 
-**Status: local implementation and checks complete November 5, 2026. Live rollout remains pending and user-run.**
+**Status: complete for the core signup scope, November 5, 2026. Beta and production are deployed and working.**
+
+See the [completion handoff](#completion-handoff--november-5-2026) for current
+status, evidence, and verification limits. Earlier handoffs below are historical.
 
 Planning date: November 5, 2026. Milestones 1–2 are complete and live-verified.
 This plan adds a working launch-notification form to the existing scaffold.
@@ -489,16 +492,18 @@ hostnames, intended welcome automation, actual quotas, and account suppression
 behavior. CloudWatch alarms have no notification destination until one is configured.
 List IDs, public key, and the simple form are settled.
 
-**Next action:** start the access review in [cloud/SIGNUP.md](../cloud/SIGNUP.md).
+**Original planning next action:** start the access review in [cloud/SIGNUP.md](../cloud/SIGNUP.md).
+That rollout has since completed; see the completion handoff below.
 
 
 ## Implementation handoff — November 5, 2026
 
-**Local-ready; not live-verified.** Implemented the minimal form, Turnstile
+**Historical implementation handoff: local-ready, rollout not yet performed at this point.** Implemented the minimal form, Turnstile
 lifecycle, synchronous signup handler, two API stacks, shared-secret access,
 private entry/preflight/status/enable commands, and validated publication settings.
 The user's shared public key is recorded in `cloud/signup.json`; beta list **5**
-and production list **4** are fixed. Both enabled flags remain false.
+and production list **4** are fixed. Both enabled flags were false at this
+implementation handoff; both are now true following user-run rollout.
 
 The user approved development with these amendments: share the widget and both
 provider secrets, use the supplied existing lists, and allow the intended
@@ -558,4 +563,72 @@ domain certificate attachment/removal permissions; and added regression assertio
 Signup logs now use `RetainExceptOnCreate` while retaining established logs on
 update/delete. The [signup runbook](../cloud/SIGNUP.md#recover-the-initial-beta-tagging-failure)
 contains the concrete user-run access update and one-time cleanup/retry commands.
-No recovery writes were executed by the agent. Live rollout remains pending.
+No recovery writes were executed by the agent. Live rollout was still pending
+at this correction; the completion record below supersedes that status.
+
+
+## Completion handoff — November 5, 2026
+
+**Milestone 3 is closed for the core signup scope.** The user deployed beta and
+production and successfully submitted both forms, receiving Brevo welcome emails
+from each. The user also tested unsubscribing a controlled beta address and
+submitting it again, confirming it stays unsubscribed in Brevo.
+
+### Recorded evidence
+
+| Area | Evidence and source |
+| --- | --- |
+| Signup services | Agent read-only AWS inspection: `FlatGirlBetaSignup` and `FlatGirlProductionSignup` are `UPDATE_COMPLETE`, enabled, targeting lists **5** and **4** respectively |
+| Existing hosting | Agent read-only AWS inspection: `FlatGirlBetaSite` and `FlatGirlProductionSite` remain `CREATE_COMPLETE` |
+| Beta artifact | Local verification receipt: release `20261106T022828Z-f7b4d90d3334`, verified November 5 at 8:30 p.m. America/Chicago |
+| Production artifact | Local verification receipt: release `20261106T024422Z-4c30dce636d8`, verified November 5 at 8:46 p.m. America/Chicago |
+| Successful signup and welcome | User-confirmed real browser submission and received email on both environments; the agent did not submit an address or inspect contacts/inboxes |
+| Unsubscribe preservation | User-confirmed controlled beta unsubscribe/re-submit remained unsubscribed in Brevo |
+| Live API rejection/CORS | Agent checked both endpoints: allowed-origin preflight returned 204 with the correct origin; empty JSON submission returned 400/no-store; an untrusted origin returned 403/no-store without an allow-origin header |
+| Local failure coverage | Previously passing handler/browser tests cover duplicates, global/list suppression, invalid tokens, hostname/action checks, provider errors, ambiguous writes, retry, expiry, and timeouts |
+
+Release timestamps use UTC, so the `20261106` prefix corresponds to the evening
+of November 5 in America/Chicago. Receipt timestamps establish recorded artifact
+verification; this closeout did not repeat the full site-byte/browser verifier.
+The empty-request API checks contained no email or token and could not create
+contacts or trigger welcome emails.
+
+### Final operating configuration
+
+1. Beta is `https://beta.flatgirl.net` with
+   `https://beta-api.flatgirl.net/subscribe`, Brevo test list **5**.
+2. Production is `https://flatgirl.net` with
+   `https://api.flatgirl.net/subscribe`, Brevo launch list **4**.
+3. Both share the configured Turnstile widget and two SSM secrets. Both flags in
+   `cloud/signup.json` and both deployed stack outputs are enabled.
+4. The form uses an email field and explanatory blurb, without a checkbox or
+   custom consent history. Brevo owns welcome delivery; the backend only manages
+   eligible list membership. Launch campaigns and sales activation remain separate.
+5. [cloud/SIGNUP.md](../cloud/SIGNUP.md) remains the operating runbook for secret
+   rotation, health, enable/disable, publication, and recovery. The earlier failed
+   first-deployment cleanup is historical and must not be repeated on these live stacks.
+
+### Verification limits and future operations
+
+The following are recorded limits, not claims of successful live tests:
+
+- Live provider-outage injection, shared-secret rotation, backend disable/re-enable,
+  and backend rollback were not observed during closeout. Local tests and recovery
+  instructions are available; production should not be disrupted merely to repeat them.
+- The controlled unsubscribe test establishes the normal re-submit behavior. It
+  does not prove an atomic guarantee for an unsubscribe concurrent with a list update.
+  Optional Brevo consent-group behavior remains account-dependent and fails closed
+  when unsupported by the handler.
+- The implemented CloudWatch alarms have no notification destination configured
+  in this repository. Set up an operator notification path before relying on
+  unattended alerts, and review provider quota against planned advertising traffic.
+
+The initial tagging-permission failure was corrected and the user's subsequent
+rollout succeeded. The user also corrected production list ID to **4** and
+resolved Brevo's unknown-IP restriction. The closeout made documentation changes
+and non-mutating AWS/API checks only; no infrastructure changes, secret reads,
+contact mutations, emails, commits, or pushes were performed by the agent.
+
+**Next session:** read `docs/IMPLEMENTATION-PLAN.md` and this completion handoff;
+write the detailed milestone 4 plan for Meta Pixel and tracking consent before
+starting development. Final product design stays in milestone 6.

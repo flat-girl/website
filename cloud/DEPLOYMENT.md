@@ -6,7 +6,8 @@ live rollback drill was waived. Resource independence was checked in deployed
 templates; a live beta disable/re-enable drill was not observed. See the
 [completion evidence](../docs/milestone-2-plan.md#live-completion-handoff--november-5-2026).
 For a new machine/operator, complete [access setup](ACCESS.md) first.
-The current production artifact is the plain scaffold with temporary noindex.
+The current production artifact is the scaffold with working signup and temporary
+noindex. Milestone 3 signup is deployed; see [SIGNUP.md](SIGNUP.md).
 It is still publicly accessible. Beta's password does not protect shared images.
 
 ## 1. Review and provision shared resources and beta

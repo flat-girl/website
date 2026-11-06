@@ -1,7 +1,8 @@
 # Boring Flat Girl — implementation roadmap
 
-Planning baseline: November 5, 2026. Milestones 1–2 are complete;
-beta/production hosting is live-verified. Milestone 3 is locally implemented with live rollout pending; milestones 4–6 are pending.
+Status updated November 5, 2026. Milestones 1–3 are complete for their core scope.
+Beta and production hosting/signup are deployed; the user verified welcome email
+delivery and preserved unsubscribe status. Milestones 4–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.
@@ -176,7 +177,11 @@ Passing synthesis or IAM simulation alone is not deployment verification.
 
 ### 3. Turnstile and Brevo signup — roughly 4–8 hours
 
-**Status:** [local implementation and checks complete; live rollout pending](milestone-3-plan.md#implementation-handoff--november-5-2026).
+**Status:** complete November 5, 2026. See the
+[completion handoff and verification limits](milestone-3-plan.md#completion-handoff--november-5-2026).
+The user verified real signup and welcome delivery on both environments, plus
+unsubscribe/re-submit preservation on beta. Deployed list settings and live API
+validation/CORS checks were independently confirmed.
 See the [signup runbook](../cloud/SIGNUP.md). Beta uses its own test list. The form has an explanatory blurb,
 no consent checkbox, and no custom consent timestamps or wording-version tracking.
 Beta list **5** and production list **4** share provider keys and one Turnstile

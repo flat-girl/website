@@ -1,7 +1,11 @@
 # Signup operations
 
-**Local implementation is ready for rollout. No signup infrastructure or provider
-settings have been deployed by the agent.** Both environments start disabled.
+**Beta and production signup are deployed and enabled as of November 5, 2026.**
+The user verified both forms and welcome emails, plus preserved unsubscribe status
+on a beta re-submission. See the [completion evidence and verification limits](../docs/milestone-3-plan.md#completion-handoff--november-5-2026).
+
+The numbered rollout steps below are retained for setup/recovery, not outstanding
+closeout tasks. The initial deployment and tagging-failure recovery are complete.
 
 | Setting | Beta | Production |
 | --- | --- | --- |
@@ -221,6 +225,9 @@ It does not use the real widget or contact Brevo. Do not publish that fixture;
 use `make site-build` for environment-validated release artifacts.
 
 ## Recover the initial beta tagging failure
+
+**Historical incident: resolved by the user. Both signup stacks are now live.
+Do not run the deletion commands below against the current working deployment.**
 
 Read-only inspection on November 5, 2026 found `FlatGirlBetaSignup` in
 `ROLLBACK_COMPLETE`, termination protection off, and the original Stage creation
