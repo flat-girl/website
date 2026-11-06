@@ -36,6 +36,39 @@ def fixture(root):
     write_json(root/'images/recipes.json',dict(widths=[20,40],quality=85,fullQuality=90))
 
 class DeploymentTests(unittest.TestCase):
+    def test_favicon_remote_render_png_content_type_and_receipt_without_sources(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(d)
+            fixture(root)
+            source = root / 'images/raw/icon.png'
+            Image.new('RGBA', (200, 200), (0, 255, 0, 128)).save(source)
+            manifest = json.loads((root / 'images/manifest.json').read_text())
+            manifest['images'].append(dict(id='icon', file='icon.png', alt='Icon', recipe='favicon', **source_info(source)))
+            write_json(root / 'images/manifest.json', manifest)
+            recipes = json.loads((root / 'images/recipes.json').read_text())
+            recipes['favicon'] = dict(format='png', widths=[32, 64, 180])
+            write_json(root / 'images/recipes.json', recipes)
+            aws = FakeAWS()
+            receipt = ensure(aws, root=root)
+            png_entries = [entry for entry in plan(root)['entries'] if entry['key'].endswith('.png')]
+            self.assertEqual(len(png_entries), 3)
+            remote_bytes = {}
+            for entry in png_entries:
+                self.assertEqual(aws.objects[entry['key']]['ContentType'], 'image/png')
+                output = root / 'images/processed' / entry['key']
+                remote_bytes[entry['key']] = output.read_bytes()
+                with Image.open(output) as image:
+                    self.assertEqual(image.size, (entry['width'], entry['width']))
+            prepare(root)
+            for key, data in remote_bytes.items():
+                self.assertEqual((root / 'images/processed' / key).read_bytes(), data)
+            import shutil
+            shutil.rmtree(root / 'images/raw')
+            shutil.rmtree(root / 'images/processed')
+            metadata = install_receipt(receipt, root)
+            self.assertEqual(metadata['images'][-1]['recipe'], 'favicon')
+            self.assertEqual(ensure(aws, check=True, root=root)['objects'], receipt['objects'])
+
     def test_discovered_sources_upload_with_their_actual_image_content_type(self):
         with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
             root = Path(d)

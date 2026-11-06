@@ -2,7 +2,7 @@
 import json
 import re
 from pathlib import Path
-from prepare_images import ROOT, RENDERER, sha256, write_json
+from prepare_images import ROOT, RENDERER, sha256, write_json, image_transforms
 
 IMMUTABLE = 'public, max-age=31536000, immutable'
 
@@ -27,16 +27,16 @@ def plan(root=ROOT):
         if not re.fullmatch(r'[0-9a-f]{64}',source['sha256']) or any(type(source[k]) is not int or source[k] <= 0 for k in ('width','height','bytes')):
             raise ValueError('Invalid source metadata')
         variants=[]
-        for width in sorted({min(w,source['width']) for w in widths}|{source['width']}):
-            height=max(1,round(source['height']*width/source['width']))
-            transform=dict(width=width,height=height,quality=recipes['fullQuality'] if width==source['width'] else recipes['quality'],format='webp',method=6,resample='lanczos')
+        for transform in image_transforms(source, recipes):
+            width,height=transform['width'],transform['height']
             fingerprint=digest(dict(source=source['sha256'],transform=transform,renderer=RENDERER))
-            key=f"variants/{fingerprint}/{source['id']}-{width}.webp"
+            key=f"variants/{fingerprint}/{source['id']}-{width}.{transform['format']}"
             variant=dict(key=key,width=width,height=height)
             variants.append(variant)
             entries.append(dict(**variant,fingerprint=fingerprint,transform=transform,source=source))
-        images.append(dict(id=source['id'],alt=source['alt'],variants=variants,full=variants[-1],
-                           display=[v for v in variants if v['width'] in {min(w,source['width']) for w in widths}]))
+        images.append(dict(id=source['id'],alt=source['alt'],recipe=source.get('recipe','default'),variants=variants,full=variants[-1],
+                           display=variants if source.get('recipe')=='favicon' else
+                           [v for v in variants if v['width'] in {min(w,source['width']) for w in widths}]))
     return dict(version=1,digest=digest(dict(manifest=manifest,recipes=recipes,renderer=RENDERER)),renderer=RENDERER,images=images,entries=entries)
 
 def validate_receipt(receipt, expected, origin=None, account=None):

@@ -246,7 +246,8 @@ def verify(aws,env,directory):
         if manifest['noindex'] and 'noindex' not in headers.get('X-Robots-Tag',''):raise ValueError(f'Missing noindex header: {path}')
     for key,obj in manifest['images']['objects'].items():
         status,headers,data=request(manifest['imageOrigin']+'/'+key)
-        if status!=200 or sha256(data)!=obj['sha256'] or headers.get_content_type()!='image/webp' or headers.get('Cache-Control')!=IMMUTABLE:
+        content_type = 'image/png' if key.endswith('.png') else 'image/webp'
+        if status!=200 or sha256(data)!=obj['sha256'] or headers.get_content_type()!=content_type or headers.get('Cache-Control')!=IMMUTABLE:
             raise ValueError(f'Image CDN verification failed: {key}')
     probes=[(origin+'/offer?utm_source=check&x=1&x=2',302,origin+'/?utm_source=check&x=1&x=2'),
             ('https://'+out['DistributionDomainName']+'/',301,origin+'/'),(origin+'/index.html',301,origin+'/')]

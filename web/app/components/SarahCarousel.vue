@@ -1,5 +1,11 @@
 <script setup lang="ts">
-const images = useImages()
+const availableImages = useImages()
+// Preparing an asset does not select it for this carousel.
+const images = ['sarah-front', 'sarah-back'].map(id => {
+  const image = availableImages.find(image => image.id === id)
+  if (!image) throw new Error(`Missing carousel image: ${id}`)
+  return image
+})
 const active = ref(0)
 const ready = ref(false)
 onMounted(() => { ready.value = true })

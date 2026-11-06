@@ -16,7 +16,7 @@ release = $(if $(strip $(RELEASE)),--release $(call quote,$(RELEASE)))
 no_dry_run = $(if $(filter 0,$(DRY_RUN)),,$(error This target does not support DRY_RUN; use cloud-diff for infrastructure previews))
 
 .PHONY: help cloud-preflight cloud-diff cloud-deploy beta-auth beta-auth-migrate beta-enabled \
-        sources-import sources-pull images-prepare images-ensure images-check \
+        sources-import sources-pull image-crop images-prepare images-ensure images-check \
         site-build site-publish site-verify site-rollback signup-secrets signup-preflight signup-status signup-enabled
 
 help:
@@ -30,6 +30,7 @@ help:
 	  '  make beta-auth PROFILE=flat-girl' \
 	  '  make beta-enabled PROFILE=flat-girl ENABLED=false' \
 	  '  make images-prepare  (discover raw images, refresh manifest and render locally)' \
+	  '  make image-crop  (overwrite raw Sarah icon using constants in tools/crop_icon.py)' \
 	  '  make sources-import PROFILE=flat-girl DRY_RUN=1' \
 	  '  make sources-pull PROFILE=flat-girl' \
 	  '  make images-ensure PROFILE=flat-girl DRY_RUN=1' \
@@ -65,6 +66,9 @@ beta-auth-migrate:
 
 beta-enabled:
 	$(no_dry_run)$(PYTHON) tools/cloud.py beta-enabled $(profile) --value $(call required,ENABLED)
+
+image-crop:
+	$(PYTHON) tools/crop_icon.py
 
 images-prepare:
 	$(if $(filter 0,$(DRY_RUN)),,$(error images-prepare does not support DRY_RUN; it updates the local manifest and outputs))$(PYTHON) tools/prepare_images.py --refresh-manifest

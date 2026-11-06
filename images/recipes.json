@@ -1,5 +1,9 @@
 {
   "widths": [480, 960],
   "quality": 85,
-  "fullQuality": 90
+  "fullQuality": 90,
+  "favicon": {
+    "format": "png",
+    "widths": [32, 64, 180]
+  }
 }

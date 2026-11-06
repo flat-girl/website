@@ -26,7 +26,14 @@ npm run dev --prefix web
 ```
 
 Open the localhost URL printed by Nuxt. Both dev and generate prepare images
-automatically. On a new checkout, first restore the two supplied originals into
+automatically. In `npm run dev`, the notification form is enabled automatically
+and posts to a local mock at `/api/subscribe`. Turnstile is simulated, no signup
+is stored, and no email is sent; no API keys or signup environment variables are
+needed. Generated builds continue to use the configured live API (or show the
+disabled form when signup is not enabled). Check the local flow with
+`npm run test:signup:dev --prefix web`.
+
+On a new checkout, first restore the two supplied originals into
 `images/raw/` using the filenames recorded in `images/manifest.json`; these files
 are intentionally excluded from Git. After provisioning the image stack, restore
 them with `make sources-pull PROFILE=flat-girl`.
@@ -45,6 +52,26 @@ paths as files, not rewrite them to HTML. There is no production Nuxt server.
 
 ## Images
 
+To regenerate the square head icon from `sarah-front`:
+
+```sh
+make image-crop
+make images-prepare
+```
+
+Adjust `LEFT`, `TOP`, and `SIZE` at the top of `tools/crop_icon.py` to tweak the framing.
+Values are pixels in the original image: `LEFT`/`TOP` locate the upper-left corner,
+and `SIZE` sets both square dimensions. The default intentionally cuts off outer
+hair. Each crop run overwrites `images/raw/sarah-icon.png` at native resolution,
+preserving transparency. The original front image is preserved. Run
+`make images-prepare` after each crop to refresh its manifest entry and web variants.
+
+The `sarah-icon.png` manifest entry selects `"recipe": "favicon"`. Its settings in
+`images/recipes.json` generate lossless PNGs at 32×32 and 64×64 for browser favicons
+and 180×180 for the Apple touch icon. The raw input must be square and at least
+180×180. The page uses the generated icon URLs in local and CDN builds; a new
+crop produces new fingerprinted URLs after `make images-prepare`.
+
 `tools/prepare_images.py` uses Pillow with uv-locked dependencies:
 
 ```sh
@@ -52,9 +79,9 @@ make images-prepare
 uv run --locked --project tools python tools/prepare_images.py --check
 ```
 
-Raw PNG/JPEG/WebP files stay in ignored `images/raw/`. Clean WebPs and metadata go to ignored
-`images/processed/`. Only listed WebPs are copied to `web/public/variants/`;
-metadata is imported into the app from generated source. Each image has 480px,
+Raw PNG/JPEG/WebP files stay in ignored `images/raw/`. Clean WebPs, favicon PNGs, and metadata go to ignored
+`images/processed/`. Only listed variants are copied to `web/public/variants/`;
+metadata is imported into the app from generated source. Each default-recipe image has 480px,
 960px, and native-resolution versions. The full-size version loads when its link
 is opened. Normal carousel display uses the smaller two with responsive markup.
 
@@ -69,7 +96,9 @@ make images-prepare
 This discovers new PNG/JPEG/WebP files, adds manifest entries with filename-based
 IDs and default alt text, refreshes source checksums/dimensions, and prepares variants.
 Existing IDs, alt text and order are preserved; new files append in filename order.
-No manual manifest entry or AWS profile is needed. Review the generated alt text
+No manual manifest entry or AWS profile is needed. Prepared assets are available
+to the app but do not automatically appear on the page: the Sarah carousel explicitly
+selects `sarah-front` and `sarah-back`. Review the generated alt text
 and commit the manifest diff; never commit raw/processed image directories.
 Keep old published variants for rollback. [Shared image commands](cloud/IMAGES.md)
 now provide conditional CDN uploads and verified URL receipts.

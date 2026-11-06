@@ -2,7 +2,9 @@
 import { loadTurnstile, type TurnstileApi } from '~/utils/turnstile'
 
 const config = useRuntimeConfig().public
-const enabled = config.signupEnabled === true
+const mockSignup = import.meta.dev
+const enabled = mockSignup || config.signupEnabled === true
+const signupEndpoint = mockSignup ? '/api/subscribe' : config.signupEndpoint
 const email = ref('')
 const website = ref('')
 const token = ref('')
@@ -29,6 +31,11 @@ async function verify() {
   const current = ++attempt
   token.value = ''
   verificationFailed.value = false
+  if (mockSignup) {
+    token.value = `local-signup-${current}`
+    verificationMessage.value = ''
+    return
+  }
   verificationMessage.value = 'Loading verification…'
   if (widgetId !== undefined) turnstile?.remove(widgetId)
   widgetId = undefined
@@ -70,7 +77,7 @@ async function submit() {
   const timer = window.setTimeout(() => request.abort(), 18000)
   let retry = false
   try {
-    const result = await fetch(config.signupEndpoint, {
+    const result = await fetch(signupEndpoint, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       credentials: 'include', redirect: 'error', signal: request.signal,
       body: JSON.stringify({ email: email.value.trim(), website: website.value, turnstileToken: submittedToken }),
@@ -122,7 +129,8 @@ onBeforeUnmount(() => {
     <h2 id="signup-heading" class="text-2xl font-bold">Notify me when it drops</h2>
     <p v-if="!enabled" class="mt-3">Notifications aren't available yet. Check back soon.</p>
     <template v-else>
-      <p v-if="config.signupEnvironment === 'beta'" class="mt-2 text-sm font-semibold">Test signup — this form uses our test list.</p>
+      <p v-if="mockSignup" class="mt-2 text-sm font-semibold">Local preview — signups are simulated; no email is sent.</p>
+      <p v-else-if="config.signupEnvironment === 'beta'" class="mt-2 text-sm font-semibold">Test signup — this form uses our test list.</p>
       <p v-if="accepted" ref="success" tabindex="-1" role="status" class="mt-4 rounded border border-green-700 p-4 focus:outline-2 focus:outline-offset-4">
         Thanks—your notification request has been received.
       </p>
@@ -148,7 +156,7 @@ onBeforeUnmount(() => {
         <p id="signup-message" role="alert" class="mt-3 text-sm">{{ message }}</p>
         <p v-if="!mounted" class="mt-3 text-sm">Please enable JavaScript to sign up for the notification.</p>
       </form>
-      <p id="signup-privacy" class="mt-4 text-sm text-gray-700">We use Brevo to manage the notification list and send our welcome email, and Cloudflare Turnstile to prevent spam.</p>
+      <p v-if="!mockSignup" id="signup-privacy" class="mt-4 text-sm text-gray-700">We use Brevo to manage the notification list and send our welcome email, and Cloudflare Turnstile to prevent spam.</p>
     </template>
   </section>
 </template>

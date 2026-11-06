@@ -11,8 +11,8 @@ export async function installImageFixture(context: BrowserContext) {
   await context.route('https://fixture.cloudfront.net/**',async route=>{
     const key=new URL(route.request().url()).pathname.slice(1)
     if(key==='favicon.ico')return route.fulfill({status:204})
-    if(!/^variants\/[a-f0-9]{64}\/[a-z0-9-]+\.webp$/.test(key))return route.fulfill({status:404})
-    await route.fulfill({status:200,contentType:'image/webp',body:await readFile(path.join(root,key))})
+    if(!/^variants\/[a-f0-9]{64}\/[a-z0-9-]+\.(webp|png)$/.test(key))return route.fulfill({status:404})
+    await route.fulfill({status:200,contentType:key.endsWith('.png')?'image/png':'image/webp',body:await readFile(path.join(root,key))})
   })
 }
 

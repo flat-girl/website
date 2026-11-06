@@ -9,10 +9,43 @@ import unittest
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from prepare_images import prepare, source_info
+from prepare_images import prepare, source_info, image_transforms
+from image_plan import plan
 
 
 class ImagesTest(unittest.TestCase):
+    def test_favicon_recipe_outputs_pngs_and_refreshes_changed_source(self):
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(directory)
+            raw = root / 'images/raw'
+            raw.mkdir(parents=True)
+            source = raw / 'icon.png'
+            Image.new('RGBA', (200, 200), (255, 0, 0, 128)).save(source)
+            asset = dict(id='icon', file='icon.png', alt='Icon', recipe='favicon', **source_info(source))
+            (root / 'images/manifest.json').write_text(json.dumps({'images': [asset]}))
+            recipes = dict(widths=[480, 960], quality=85, fullQuality=90,
+                           favicon=dict(format='png', widths=[32, 64, 180]))
+            (root / 'images/recipes.json').write_text(json.dumps(recipes))
+            first = prepare(root)
+            variants = first['images'][0]['variants']
+            self.assertEqual([v['width'] for v in variants], [32, 64, 180])
+            self.assertEqual([v['key'] for v in variants], [e['key'] for e in plan(root)['entries']])
+            for variant in variants:
+                with Image.open(root / 'web/public' / variant['key']) as image:
+                    self.assertEqual(image.format, 'PNG')
+                    self.assertEqual(image.size, (variant['width'], variant['width']))
+                    self.assertEqual(image.getpixel((0, 0))[3], 128)
+            self.assertEqual(prepare(root), first)
+            prepare(root, check=True)
+            Image.new('RGBA', (200, 200), (0, 255, 0, 128)).save(source)
+            changed = prepare(root, refresh=True)
+            self.assertEqual(changed['images'][0]['recipe'], 'favicon')
+            self.assertNotEqual(changed['images'][0]['variants'][0]['key'], variants[0]['key'])
+            prepare(root, check=True)
+            for dimensions in [(100, 100), (200, 250)]:
+                with self.assertRaisesRegex(ValueError, 'square'):
+                    image_transforms(dict(asset, width=dimensions[0], height=dimensions[1]), recipes)
+
     def test_refresh_discovers_sources_preserves_editorial_fields_and_reuses_outputs(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
             root = Path(directory)

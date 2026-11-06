@@ -19,10 +19,10 @@ export default defineNuxtConfig({
       htmlAttrs: { lang: 'en' },
       title: 'Boring Flat Girl',
       meta: env.FLAT_GIRL_NOINDEX === 'true' ? [{ name: 'robots', content: 'noindex, nofollow, noarchive' }] : [],
-      link: [{ rel: 'icon', href: 'data:,' }],
     },
   },
   nitro: {
+    // Local API mocks run in dev; deployments contain only static assets.
     preset: 'static',
     prerender: { crawlLinks: false, failOnError: true, routes: ['/'] },
   },

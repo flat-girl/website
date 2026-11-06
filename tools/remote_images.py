@@ -8,7 +8,7 @@ import tempfile
 from PIL import Image, ImageOps
 from aws_common import AWS, AwsError, bucket, project
 from image_plan import IMMUTABLE, plan, validate_receipt
-from prepare_images import ROOT, sha256, source_info, write_json
+from prepare_images import ROOT, sha256, source_info, write_json, save_variant
 
 def source_key(source): return f"sources/{source['sha256']}/{source['file']}"
 def checksum64(value): return base64.b64encode(bytes.fromhex(value)).decode()
@@ -56,7 +56,7 @@ def remote_variant(aws,name,entry):
     try: encoded=checksum64(digest)
     except ValueError: raise ValueError('Invalid variant checksum') from None
     if (head.get('ChecksumSHA256')!=encoded or head.get('ContentLength',0)<=0 or
-        head.get('ContentType')!='image/webp' or head.get('CacheControl')!=IMMUTABLE or
+        head.get('ContentType')!=f"image/{entry['transform']['format']}" or head.get('CacheControl')!=IMMUTABLE or
         metadata.get('fingerprint')!=entry['fingerprint'] or
         any(metadata.get(k)!=str(entry[k]) for k in ('width','height'))):
         raise ValueError(f'Remote variant conflict: {entry["key"]}')
@@ -66,11 +66,8 @@ def render(source,entry,path):
     with Image.open(source) as original:
         pixels=ImageOps.exif_transpose(original).convert('RGBA')
         pixels=Image.frombytes('RGBA',pixels.size,pixels.tobytes())
-        pixels=pixels.resize((entry['width'],entry['height']),Image.Resampling.LANCZOS)
         path.parent.mkdir(parents=True,exist_ok=True)
-        temporary=path.with_suffix('.tmp')
-        pixels.save(temporary,format='WEBP',quality=entry['transform']['quality'],method=6)
-        temporary.replace(path)
+        save_variant(pixels,path,entry['transform'])
 
 def ensure(aws,check=False,dry_run=False,root=ROOT):
     expected=plan(root); outputs=destinations(aws); name=outputs['VariantsBucketName']
@@ -92,7 +89,7 @@ def ensure(aws,check=False,dry_run=False,root=ROOT):
             counts['downloads']+=downloaded
             render(source,entry,output); counts['rendered']+=1
         digest=sha256(output.read_bytes())
-        immutable_upload(aws,name,entry['key'],output,'image/webp',dict(sha256=digest,fingerprint=entry['fingerprint'],width=str(entry['width']),height=str(entry['height'])))
+        immutable_upload(aws,name,entry['key'],output,f"image/{entry['transform']['format']}",dict(sha256=digest,fingerprint=entry['fingerprint'],width=str(entry['width']),height=str(entry['height'])))
         objects[entry['key']]=remote_variant(aws,name,entry)
         counts['uploads']+=1
     print('Images: '+', '.join(f'{v} {k}' for k,v in counts.items()))
