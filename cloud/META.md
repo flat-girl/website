@@ -376,18 +376,18 @@ these records, so it cannot add synthetic rows.
 
 ## Recovery only
 
-If tracking must be stopped during an incident, this optional emergency command
-disables it without taking down signup or the site. It is not a setup step:
+To pause Meta delivery during an incident, use this optional emergency command.
+It leaves page serving, edge cookie capture and ViewContent enqueueing active:
 
 ```sh
 make meta-config PROFILE=flat-girl SITE_ENV=production MODE=off
 ```
 
 Allow up to 60 seconds for caches to expire. Signup and page serving remain active.
-Explicit `VIEW_ENABLED=false`, `LEAD_ENABLED=false` or ``
-overrides are also available for troubleshooting. Disabling capture stops future
-cookies but does not delete existing cookies. Rerun the normal `meta-config` command
-to restore the environment defaults.
+Explicit `VIEW_ENABLED=false` or `LEAD_ENABLED=false` overrides pause those Meta
+sends. Outstanding messages remain retriable and can reach the DLQ. Stopping
+edge capture/enqueue requires a reviewed edge-code/association deployment. Rerun
+the normal `meta-config` command to restore delivery defaults.
 
 Restore reviewed edge associations and signup code through the existing stack
 workflow if needed; allow CloudFront replication time. Preserve replicated Lambda

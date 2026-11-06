@@ -16,7 +16,7 @@ const worker = require('../lambda/meta-worker.cjs')
 const signup = require('../lambda/signup.cjs')
 const now = 1793923200000
 const fbc = `fb.1.${now - 1000}.real_click`
-const cfg = (_env = 'production', extra = {}) => ({ mode: 'live', version: 'v26.0', captureEnabled: true, viewEnabled: true, leadEnabled: true, ...extra })
+const cfg = (_env = 'production', extra = {}) => ({ mode: 'live', version: 'v26.0', viewEnabled: true, leadEnabled: true, ...extra })
 const signal = () => AbortSignal.timeout(10000)
 function edgeEvent(extra: any = {}) {
   return { Records: [{ cf: { config: { requestId: 'request123', eventType: 'viewer-response' }, request: {
@@ -116,6 +116,17 @@ test('edge only enqueues, allows work beyond 500 ms and counts separate visits a
   assert.equal(f.sent.length, 2)
   assert.notEqual(f.sent[0].event_id, f.sent[1].event_id)
   assert.equal(f.failures(), 0)
+})
+test('edge preserves response headroom when the remaining Lambda budget is short', async () => {
+  const f = edgeFixture()
+  f.runtime.send = async (_event: any, signal?: AbortSignal) => {
+    await new Promise(resolve => setTimeout(resolve, 75))
+    signal!.throwIfAborted()
+  }
+  const event = edgeEvent()
+  assert.equal(await f.handler(event, { getRemainingTimeInMillis: () => 1050 }), event.Records[0].cf.response)
+  assert.equal(f.failures(), 1)
+  assert.equal(f.sent.length, 0)
 })
 test('producer reads no Meta credentials; queue keeps archive email separate from hashed Meta payload and safe logs', async () => {
   const reads: string[] = [], messages: any[] = [], logs: any[] = []
@@ -322,7 +333,10 @@ test('edge associations preserve production caching and beta auth; producer IAM 
     assert.deepEqual(events, env === 'beta' ? ['origin-response'] : ['viewer-response', 'viewer-request'])
     assert.equal(behavior.FunctionAssociations?.length ?? 0, env === 'beta' ? 1 : 0)
     const functions: any[] = Object.values(template.Resources).filter((r: any) => r.Type === 'AWS::Lambda::Function')
-    for (const fn of functions) { assert.deepEqual(fn.Properties.Architectures, ['x86_64']); assert.equal(fn.Properties.Environment, undefined) }
+    for (const fn of functions) {
+      assert.deepEqual(fn.Properties.Architectures, ['x86_64']); assert.equal(fn.Properties.Environment, undefined)
+      assert.equal(fn.Properties.MemorySize, fn.Properties.FunctionName.endsWith('meta-edge') ? 512 : 128)
+    }
   }
   const policies: any[] = Object.entries(Template.fromStack(access).toJSON().Resources).filter(([id, r]: any) =>
     r.Type === 'AWS::IAM::Policy' && /SignupRuntime|MetaEdgeRuntime/.test(id)).map(([, r]) => r)
@@ -330,6 +344,11 @@ test('edge associations preserve production caching and beta auth; producer IAM 
   for (const policy of policies) {
     const text = JSON.stringify(policy)
     assert.ok(!text.includes('/credentials')); assert.ok(text.includes('sqs:SendMessage'))
+  }
+  const resources = Template.fromStack(access).toJSON().Resources
+  for (const [id, resource] of Object.entries(resources) as [string, any][]) {
+    if (/MetaEdgeRuntime/.test(id) && resource.Type === 'AWS::IAM::Policy')
+      assert.ok(!JSON.stringify(resource).includes('ssm:'))
   }
   app.synth()
 })

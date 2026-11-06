@@ -4,7 +4,9 @@ Status updated November 6, 2026. Milestones 1–3 are complete for their core sc
 Beta and production hosting/signup are deployed; the user verified welcome email
 delivery and preserved unsubscribe status. Milestone 4 is implemented and checked
 locally; the user confirmed Meta accepted the manual regression events November 6.
-Its deployed pipeline verification and rollout remain pending. Milestones 5–6 are pending.
+Beta and production are deployed; DynamoDB records and Meta acceptance are confirmed.
+Production edge failures exposed a short enqueue deadline; the local delivery fixes
+and per-event completion checkpoints still need deployment (META.md section 5). Milestones 5–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.
@@ -227,7 +229,7 @@ before sending; do not configure or send campaigns implicitly.
 
 **Status:** [detailed plan drafted](milestone-4-plan.md) November 5, 2026;
 implementation and local checks complete; manual regression events accepted by Meta
-(user confirmation November 6); deployed pipeline verification and live rollout pending. Beta has a dedicated Meta dataset/token
+(user confirmation November 6); beta/production deployed; edge reliability fixes and delivery checkpoints await rollout. Beta has a dedicated Meta dataset/token
 and manual regression code TEST83329. Account setup, deployment propagation
 and live verification are separate from the core implementation target.
 

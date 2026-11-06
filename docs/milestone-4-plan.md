@@ -206,7 +206,7 @@ Keep the existing AWS/CDK/SSM conventions. Store dataset ID and CAPI token priva
 in `/flat-girl/meta/{environment}/credentials` SecureStrings. Nonsecret runtime
 settings use the corresponding `/settings` String parameters.
 Use secure terminal entry, not tokens in command arguments, Git, public bundles
-or CDK templates. Only the matching worker reads credentials; edge/signup read settings and enqueue.
+or CDK templates. Only the matching worker reads credentials; signup reads settings; edge only enqueues.
 Publishers cannot read either environment's parameters.
 
 Normal setup selects delivery to each environment’s separate dataset, enables
@@ -291,7 +291,7 @@ a real signup may trigger the existing Brevo welcome email.
 Record configuration commands, queue/DLQ state, safe delivery outcomes and function versions
 and verification results in `cloud/META.md`. Reuse existing logging/health patterns;
 no new alerting project is required. Disable Meta sends through server configuration
-while leaving signup enabled; cookie capture can be disabled separately. Rollback
+while leaving signup enabled; stopping cookie capture requires an edge deployment. Rollback
 restores the previous edge version associations and signup code. HTML rollback
 alone does not undo edge tracking; allow for CloudFront propagation.
 
@@ -385,3 +385,10 @@ completed work. Configuration gates now live in signup/worker; the edge always
 captures attribution and queues eligible non-GPC views. No visitor/email-level
 ViewContent suppression is introduced. These changes still require the explicit
 IAM, signup-stack and site-stack deployments in runbook section 5.
+
+
+Validation of these fixes: 35 infrastructure tests, TypeScript, seven-stack
+synthesis, 26 Python tests and runbook command syntax passed locally. Tests cover
+SSM-free edge enqueue beyond the old deadline, response-time reserve, 304/repeated
+visits, durable delivery flags, checkpoint failure and completed-message redelivery.
+Only read-only production diagnostics were run; no fixes have been deployed by the agent.

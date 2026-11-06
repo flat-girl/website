@@ -14,7 +14,7 @@ class FakeAWS:
         self.values = {
             '/flat-girl/meta/beta/credentials': {'datasetId': '111', 'accessToken': 'beta-token'},
             '/flat-girl/meta/production/credentials': {'datasetId': '222', 'accessToken': 'production-token'},
-            '/flat-girl/meta/beta/settings': dict(mode='live', version='v25.0', viewEnabled=True, leadEnabled=True, captureEnabled=True),
+            '/flat-girl/meta/beta/settings': dict(mode='live', version='v25.0', viewEnabled=True, leadEnabled=True),
         }
     def writer(self): pass
     def call(self, service, operation, **kwargs):
