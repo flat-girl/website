@@ -19,6 +19,14 @@ test.describe('enabled signup', () => {
     test(`simple accessible signup at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 })
       let sent: any
+      await page.addInitScript(() => {
+        const original = window.fetch
+        ;(window as any).__signupCredentials = []
+        window.fetch = (input, init) => {
+          if (String(input).endsWith('/subscribe')) (window as any).__signupCredentials.push(init?.credentials)
+          return original(input, init)
+        }
+      })
       await page.route(signupEndpoint, async route => {
         sent = route.request().postDataJSON()
         expect(route.request().headers().authorization).toBeUndefined()
@@ -36,6 +44,7 @@ test.describe('enabled signup', () => {
       await submit.focus(); await page.keyboard.press('Enter')
       await expect(page.getByText('Thanks—your notification request has been received.')).toBeFocused()
       expect(sent).toEqual({ email: 'reader@example.com', website: '', turnstileToken: 'fixture-token-0' })
+      expect(await page.evaluate(() => (window as any).__signupCredentials)).toEqual(['include'])
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   }

@@ -1,3 +1,4 @@
+const metaApi = typeof __meta !== 'undefined' ? __meta : require('./meta.cjs')
 // Inline CommonJS keeps the existing no-asset CDK deployment workflow.
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const ids = value => Array.isArray(value) && value.every(id => Number.isSafeInteger(id) && id > 0)
@@ -28,7 +29,7 @@ function parse(event) {
 }
 
 function createHandler(settings, dependencies) {
-  return async event => {
+  return async (event, context) => {
     const start = Date.now()
     // Whitelisted labels only: exceptions, URLs and provider payloads can contain PII or secrets.
     const finish = (status, outcome) => {
@@ -60,11 +61,11 @@ function createHandler(settings, dependencies) {
         return finish(403, 'verification_rejected')
 
       stage = 'brevo'
-      const headers = { 'api-key': secrets.brevo, accept: 'application/json', 'content-type': 'application/json' }
+      const brevoHeaders = { 'api-key': secrets.brevo, accept: 'application/json', 'content-type': 'application/json' }
       const contactUrl = `https://api.brevo.com/v3/contacts/${encodeURIComponent(input.email)}?identifierType=email_id`
       const call = (url, options = {}) => {
         signal.throwIfAborted()
-        return dependencies.fetch(url, { headers, redirect: 'error', signal, ...options })
+        return dependencies.fetch(url, { headers: brevoHeaders, redirect: 'error', signal, ...options })
       }
       const lookup = async () => {
         const result = await call(contactUrl)
@@ -76,14 +77,16 @@ function createHandler(settings, dependencies) {
         return data
       }
       const existing = async data => {
-        if (data.emailBlacklisted || data.listUnsubscribed?.includes(settings.listId) || data.listIds.includes(settings.listId)) return
+        if (data.emailBlacklisted || data.listUnsubscribed?.includes(settings.listId) || data.listIds.includes(settings.listId)) return false
         // Account consent groups need an explicit mapping before adding eligible contacts.
         if (data.consentGroups !== undefined) throw new Error('unsupported_account_configuration')
         const saved = await call(contactUrl, { method: 'PUT', body: JSON.stringify({ listIds: [settings.listId] }) })
         if (saved.status !== 204) throw new Error('upstream')
+        return true
       }
+      let registered = false
       const contact = await lookup()
-      if (contact) await existing(contact)
+      if (contact) registered = await existing(contact)
       else {
         const saved = await call('https://api.brevo.com/v3/contacts', {
           method: 'POST', body: JSON.stringify({ email: input.email, listIds: [settings.listId], updateEnabled: false }),
@@ -93,8 +96,22 @@ function createHandler(settings, dependencies) {
           if (saved.status !== 400 || (await saved.json())?.code !== 'duplicate_parameter') throw new Error('upstream')
           const raced = await lookup()
           if (!raced) throw new Error('upstream')
-          await existing(raced)
-        }
+          registered = await existing(raced)
+        } else registered = true
+      }
+      if (registered && dependencies.meta) {
+        const budget = Math.min(1500, (context?.getRemainingTimeInMillis?.() ?? 15000) - 1000)
+        if (budget > 0) try {
+          const trackingSignal = AbortSignal.timeout(budget)
+          const config = await dependencies.meta.config(trackingSignal)
+          if (config.mode !== 'off' && config.leadEnabled) {
+            const payload = metaApi.buildEvent('Lead', settings.environment, {
+              email: input.email, ip: event.requestContext?.http?.sourceIp, agent: headers['user-agent'],
+              fbc: metaApi.readCookie(event.cookies || (headers.cookie ? [headers.cookie] : []), metaApi.cookieName(settings.environment)),
+            })
+            await dependencies.meta.send(payload, config, trackingSignal, input.email)
+          }
+        } catch { dependencies.meta.failure() }
       }
       return finish(200, 'accepted')
     } catch { return finish(503, `${stage}_failed`) }
@@ -117,21 +134,22 @@ function createSecretLoader(client, Command, names) {
 }
 
 let runtimeHandler
-exports.handler = async event => {
+exports.handler = async (event, context) => {
   if (!runtimeHandler) {
     const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm')
     runtimeHandler = createHandler({
       enabled: process.env.SIGNUP_ENABLED === 'true', origin: process.env.ALLOWED_ORIGIN,
-      listId: Number(process.env.BREVO_LIST_ID),
+      listId: Number(process.env.BREVO_LIST_ID), environment: process.env.META_ENVIRONMENT,
     }, {
       fetch,
+      meta: metaApi.createRuntime(process.env.META_ENVIRONMENT, { queueUrl: process.env.META_QUEUE_URL }),
       secrets: createSecretLoader(new SSMClient({ maxAttempts: 1 }), GetParameterCommand, {
         turnstile: process.env.TURNSTILE_PARAMETER, brevo: process.env.BREVO_PARAMETER,
       }),
       log: event => console.info(JSON.stringify(event)),
     })
   }
-  return runtimeHandler(event)
+  return runtimeHandler(event, context)
 }
 exports.createHandler = createHandler
 exports.createSecretLoader = createSecretLoader

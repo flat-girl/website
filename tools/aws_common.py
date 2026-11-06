@@ -22,6 +22,10 @@ def bucket(p,kind): return f"flat-girl-{kind}-{p['account']}-{p['region']}"
 
 class AwsError(RuntimeError):
     def __init__(self,service,operation,error):
+        if 'your session has expired' in error.lower():
+            self.code='LoginSessionExpired'
+            super().__init__('AWS login session expired; reauthenticate the source profile using aws login')
+            return
         missing_profile=re.search(r'The config profile \(([^)\r\n]+)\) could not be found',error)
         if missing_profile:
             self.code='ProfileNotFound'

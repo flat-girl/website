@@ -4,7 +4,16 @@ The source bucket is private. Only `variants/*` in the separate variants bucket
 is exposed through OAC and the image distribution's HTTPS hostname. Original
 filenames/checksums live in `images/manifest.json`; import preserves their bytes.
 
+After adding or replacing PNG/JPEG/WebP files in `images/raw/`, run the following
+from the repository root. `images-prepare` discovers new files, adds them to the
+manifest, refreshes source metadata and renders local variants. It needs no AWS
+profile. Existing IDs/alt text/order are preserved; new entries use filename-based
+IDs and default alt text, with numeric suffixes for ID collisions. Review the
+generated alt text and manifest diff before committing. Missing tracked files
+remain an error; preparation never silently removes them from the manifest.
+
 ```sh
+make images-prepare
 make sources-import PROFILE=flat-girl DRY_RUN=1
 make sources-import PROFILE=flat-girl
 make images-ensure PROFILE=flat-girl DRY_RUN=1
@@ -42,7 +51,8 @@ FLAT_GIRL_IMAGE_MODE=cdn npm run generate --prefix web
 Use `make site-build` for a deployable artifact; it verifies remote images and
 cleans build output first. A direct Nuxt build is a preview, not an archived release.
 Receipts, originals, and processed-cache metadata are never published with the site.
-Raw-file changes require explicit `prepare_images.py --refresh-manifest` and review.
+Run `make images-prepare` for raw-file additions or replacements. Review and commit
+the manifest changes, then rebuild/publish the site to display the new images.
 
 Keep historical sources and variants. Recipe/renderer changes create new URLs;
 old pages and rollback artifacts keep using old keys. `releases/` in the private

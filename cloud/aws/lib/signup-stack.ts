@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { lambdaCode, metaQueueName, metaWorkerName, eventTableName } from './meta.js'
 import { Duration, RemovalPolicy, Tags } from 'aws-cdk-lib'
 import * as api from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
@@ -7,6 +7,9 @@ import { Role } from 'aws-cdk-lib/aws-iam'
 import { Architecture, Code, Function, Runtime } from 'aws-cdk-lib/aws-lambda'
 import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs'
 import { Alarm, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch'
+import { Queue, QueueEncryption } from 'aws-cdk-lib/aws-sqs'
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources'
+import { Table, AttributeType, BillingMode, TableEncryption } from 'aws-cdk-lib/aws-dynamodb'
 import { ARecord, RecordTarget } from 'aws-cdk-lib/aws-route53'
 import { ApiGatewayv2DomainProperties } from 'aws-cdk-lib/aws-route53-targets'
 import type { Construct } from 'constructs'
@@ -24,19 +27,48 @@ export class Signup extends Base {
     const domain = new api.DomainName(this, 'Domain', { domainName: host, certificate })
     // Retain established logs, but avoid orphaning this fixed name on initial rollback.
     const logs = new LogGroup(this, 'Logs', { logGroupName: names.logs, retention: RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
+    const dlq = new Queue(this, 'MetaDeadLetters', { queueName: `${metaQueueName(env)}-dlq`,
+      encryption: QueueEncryption.SQS_MANAGED, enforceSSL: true, retentionPeriod: Duration.days(7),
+      removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
+    const queue = new Queue(this, 'MetaQueue', { queueName: metaQueueName(env),
+      encryption: QueueEncryption.SQS_MANAGED, enforceSSL: true, retentionPeriod: Duration.days(4),
+      visibilityTimeout: Duration.seconds(180), deadLetterQueue: { queue: dlq, maxReceiveCount: 5 },
+      removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
+    const workerLogs = new LogGroup(this, 'MetaWorkerLogs', { logGroupName: `/aws/lambda/${metaWorkerName(env)}`,
+      retention: RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
+    const events = new Table(this, 'Events', {
+      tableName: eventTableName(env), partitionKey: { name: 'event_id', type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST, encryption: TableEncryption.AWS_MANAGED,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
+    })
+    const worker = new Function(this, 'MetaWorker', {
+      functionName: metaWorkerName(env), runtime: Runtime.NODEJS_24_X, architecture: Architecture.ARM_64,
+      handler: 'index.handler', code: Code.fromInline(lambdaCode('worker', env)),
+      memorySize: 256, timeout: Duration.seconds(15), logGroup: workerLogs,
+      environment: { EVENTS_TABLE: events.tableName },
+      role: Role.fromRoleArn(this, 'MetaWorkerRole', `arn:aws:iam::${p.account}:role/${metaWorkerName(env)}`, { mutable: false }),
+    })
+    worker.addEventSource(new SqsEventSource(queue, { batchSize: 1, reportBatchItemFailures: true }))
+    new Alarm(this, 'MetaDeadLettersAlarm', { alarmName: `flat-girl-${env}-signup-meta-dead-letters`,
+      metric: dlq.metricApproximateNumberOfMessagesVisible({ period: Duration.minutes(5) }),
+      threshold: 1, evaluationPeriods: 1, treatMissingData: TreatMissingData.NOT_BREACHING })
+    this.output('MetaQueueUrl', queue.queueUrl)
+    this.output('MetaWorkerName', worker.functionName)
+    this.output('EventsTableName', events.tableName)
     const fn = new Function(this, 'Subscribe', {
       functionName: names.function, runtime: Runtime.NODEJS_24_X, architecture: Architecture.ARM_64,
-      handler: 'index.handler', code: Code.fromInline(readFileSync(new URL('../lambda/signup.cjs', import.meta.url), 'utf8')),
+      handler: 'index.handler', code: Code.fromInline(lambdaCode('signup', env)),
       memorySize: 256, timeout: Duration.seconds(15), logGroup: logs,
       role: Role.fromRoleArn(this, 'RuntimeRole', `arn:aws:iam::${p.account}:role/${names.role}`, { mutable: false }),
       environment: {
-        SIGNUP_ENABLED: String(cfg.enabled), ALLOWED_ORIGIN: signupOrigin(env), BREVO_LIST_ID: String(cfg.listId),
+        META_ENVIRONMENT: env, META_QUEUE_URL: queue.queueUrl, SIGNUP_ENABLED: String(cfg.enabled), ALLOWED_ORIGIN: signupOrigin(env), BREVO_LIST_ID: String(cfg.listId),
         TURNSTILE_PARAMETER: signupParameters.turnstile, BREVO_PARAMETER: signupParameters.brevo,
       },
     })
     const gateway = new api.HttpApi(this, 'Api', {
       apiName: names.function, disableExecuteApiEndpoint: true, createDefaultStage: false,
-      corsPreflight: { allowOrigins: [signupOrigin(env)], allowHeaders: ['content-type'],
+      corsPreflight: { allowCredentials: true, allowOrigins: [signupOrigin(env)], allowHeaders: ['content-type'],
         allowMethods: [api.CorsHttpMethod.POST, api.CorsHttpMethod.OPTIONS], maxAge: Duration.minutes(5) },
     })
     gateway.addRoutes({ path: '/subscribe', methods: [api.HttpMethod.POST], integration: new HttpLambdaIntegration('Subscribe', fn) })

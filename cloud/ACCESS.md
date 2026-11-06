@@ -138,3 +138,25 @@ If an initial stack reaches `ROLLBACK_COMPLETE`, inspect its events and retained
 resources before recovery. Do not repeatedly broaden IAM one failing action at
 a time, delete retained buckets, or change other projects. Correct the access
 template through the administrator, then review the recovery change together.
+
+
+## Milestone 4 access update
+
+The local Meta implementation adds per-environment edge and worker roles, two
+queues (main/DLQ), and explicit Lambda version/replication lifecycle permissions.
+Signup and edge roles can only read their own nonsecret Meta settings and enqueue;
+only the matching worker reads its Meta credentials. Publishers cannot read these
+parameters. Operator queue access is diagnostic only; purge/redrive is not granted.
+Edge log access spans AWS execution regions but only the named project functions.
+CDK splits the execution role's larger policy into an inline policy and an attached
+managed policy when needed. Review both in the access diff before applying.
+See [META.md](META.md) for deployment order and verification limits.
+
+The November 6 event-record addition creates retained DynamoDB tables named
+`flat-girl-beta-events` and `flat-girl-production-events`. Each worker has only
+`PutItem` on its own table; the operator has describe/get/scan access. Publishers,
+edge and signup roles have no table access. The execution role gets named-table
+lifecycle, tagging and PITR permissions. Apply the access update before the signup
+stacks. These tables and SQS/DLQ messages contain the requested customer identifiers;
+logs continue to exclude them. Retention/deletion protection keeps records through
+stack removal; no automatic expiry is configured.

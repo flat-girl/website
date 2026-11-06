@@ -1,8 +1,10 @@
 # Boring Flat Girl — implementation roadmap
 
-Status updated November 5, 2026. Milestones 1–3 are complete for their core scope.
+Status updated November 6, 2026. Milestones 1–3 are complete for their core scope.
 Beta and production hosting/signup are deployed; the user verified welcome email
-delivery and preserved unsubscribe status. Milestones 4–6 are pending.
+delivery and preserved unsubscribe status. Milestone 4 is implemented and checked
+locally; the user confirmed Meta accepted the manual regression events November 6.
+Its deployed pipeline verification and rollout remain pending. Milestones 5–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.
@@ -77,12 +79,16 @@ flowchart LR
   Lambda --> Verify[Turnstile Siteverify]
   Lambda --> Brevo[Brevo launch list]
   Lambda --> SSM[SSM SecureString secrets]
-  Browser -->|After tracking consent| Meta[Meta Pixel]
+  SiteCDN --> Edge[Lambda at Edge landing response]
+  Edge -->|ViewContent unless GPC| Queue[SQS Meta events]
+  Lambda -->|Successful Brevo signup operation| Queue
+  Queue --> Worker[Meta worker]
+  Worker --> Meta[Meta Conversions API]
 ```
 
 Nuxt generates static HTML and assets into `web/.output/public`. Signup is the
-only initial application backend. Meta Pixel executes in the browser, so it
-does not require a Nuxt server, CDN worker, or Conversions API backend.
+current application backend. Milestone 4 proposes Lambda@Edge ViewContent and
+server-side Meta delivery from the existing signup flow; no Nuxt server is required.
 
 Use a dedicated Flat Girl image library and variants distribution. Keep originals
 private and outside Git/public output. Generate responsive variants with
@@ -90,10 +96,10 @@ content-derived immutable URLs; use local prepared images during development.
 Default to the image distribution's HTTPS hostname, as FishLamps does, unless
 there is a concrete need for a custom image domain.
 
-Public settings—API URL, Turnstile site key, image URLs, Pixel ID and feature
-flags—are baked into the static build and require regeneration to change.
-Brevo and Turnstile secrets remain server-side in SSM. A Pixel ID is public;
-no Meta access token is needed for this browser-only integration.
+Public settings—API URLs, Turnstile site key, image URLs and feature flags—are
+baked into the static build and require regeneration to change. Brevo and
+Turnstile secrets remain server-side in SSM. Milestone 4 also keeps Meta dataset
+configuration and the CAPI token server-side, outside public build artifacts.
 
 ## Milestones
 
@@ -217,35 +223,36 @@ welcome email. Brevo sender authentication,
 unsubscribe handling and the eventual campaign need their own operational setup
 before sending; do not configure or send campaigns implicitly.
 
-### 4. Meta Pixel and consent — roughly 3–5 hours
+### 4. Meta Conversions API — target about one hour for core implementation
 
-**Outcome:** permitted browser events measure page visits and accepted signups.
+**Status:** [detailed plan drafted](milestone-4-plan.md) November 5, 2026;
+implementation and local checks complete; manual regression events accepted by Meta
+(user confirmation November 6); deployed pipeline verification and live rollout pending. Beta has a dedicated Meta dataset/token
+and manual regression code TEST83329. Account setup, deployment propagation
+and live verification are separate from the core implementation target.
 
-1. Confirm the Flat Girl Meta business/dataset/Pixel ID, ownership and Events
-   Manager access. Default tracking off locally and in tests; enable it explicitly
-   for production. Recheck current Meta setup documentation in this session.
-2. Add a small client-only Nuxt integration. Proposed baseline: load the Pixel
-   only after marketing-tracking consent, with persistent accept/reject choices
-   and a way to change them. Email subscription consent is separate; visitors
-   can subscribe while declining tracking. Agree final privacy text and markets.
-3. Send one `PageView` on consented page initialization and one `Lead` after
-   the API accepts a signup request. Prevent duplicate events from double clicks,
-   retries after UI success or component remounts; do not fire on CTA clicks,
-   Turnstile completion or failed API responses. Do not backfill pre-consent
-   actions or add a tracking `noscript` image that bypasses the chosen consent rule.
-4. Define `Lead` as an accepted request, not a newly created contact: the reference
-   API deliberately accepts duplicates and suppressed addresses generically.
-   Report actual audience size from Brevo. Do not send email addresses or enable
-   automatic advanced matching in this first integration; review automatic event
-   settings so they do not duplicate the explicit events.
-5. Test consent refusal/acceptance/withdrawal, reloads, API failures and blocked
-   tracking scripts. Confirm events in Meta Test Events/Pixel Helper after a
-   user-run rollout. Ensure security headers allow intended provider requests.
+**Outcome:** server-side `ViewContent` and signup `Lead` events, without Meta Pixel
+JavaScript or a browser page-view request.
 
-**Done when:** the intended events are visible in Meta, duplicates are controlled,
-no Meta requests occur before consent under this baseline, and signup still works
-when tracking is refused or blocked. Browser tracking cannot guarantee complete
-measurement. Conversions API and server/browser event deduplication are deferred.
+1. Capture `_fbc` immediately on eligible landing responses and keep production
+   HTML cached. Use the proposed Lambda@Edge path for network-capable edge tracking.
+2. Send `ViewContent` from the landing response unless `Sec-GPC: 1`. Send `Lead`
+   when a valid signup's Brevo create/list operation succeeds; take the provider
+   result at face value, with no extra membership checks or race coordination.
+3. Enqueue both events in environment-specific SQS queues; workers call Graph API.
+   Keep Meta email hashed and event IDs/timestamps stable across retries. Workers
+   also retain records in separate DynamoDB tables, including signup email, IP,
+   user agent and click ID when present. Storage/Meta failures retry through SQS
+   without failing an otherwise successful signup.
+4. Send normal events to separate beta and production datasets using their own
+   credentials. Setup selects Graph v26.0 automatically. Test codes are confined
+   to the one-off manual regression harness; Lambda/SQS omit them. Preserve beta Basic Auth.
+5. Verify direct POSTs, focused local tests, and deployed cookie/CORS/cache behavior.
+   Record the requested GPC split, privacy wording, and setup/disable instructions.
+
+**Done when:** both intended events are verified in Meta and existing hosting/signup
+still work. SQS handles delivery retries; cross-request event uniqueness guarantees and a
+broader tracking framework remain excluded.
 
 ### 5. GitHub beta and release deployments — roughly 4–8 hours
 
@@ -270,7 +277,7 @@ release deploys its exact tagged commit to production.
    intended environment. Validate event/ref separately: beta must be main;
    production must use the release tag's resolved SHA, reachable from main.
    Reject moved tags or stale runs. Keep IAM administration out of deployment roles.
-3. Run frontend, Python/uv image, infrastructure, and applicable signup/Pixel
+3. Run frontend, Python/uv image, infrastructure, and applicable signup/CAPI
    checks on the exact commit. PRs use offline fixtures/test providers. Deployment
    runs prepare and verify images, build with environment-specific public settings,
    and publish that checked static artifact. Do not rebuild a newer main revision
@@ -319,7 +326,7 @@ launch campaign remain separate operational work.
 | Release year/time, eligible destinations and arrival guarantee cutoff | Milestone 6 / before launch | 500 units; provisional November 27, 2026; arrival before Christmas confirmed |
 | AWS account, domain DNS, operator access and dedicated image library | Milestone 2 | Discover/confirm; do not inherit other projects' resource identities |
 | Brevo/Cloudflare ownership, list/widget and notification sender | Milestone 3 | Beta list 5 / production list 4; shared provider keys/widget; blurb without checkbox or consent-history tracking; Brevo-managed welcome email |
-| Meta ownership/Pixel ID, privacy markets, GitHub repository and trust | Milestones 4–5 | Browser Pixel with opt-in baseline; main-to-beta dev gate and release-to-production deployment |
+| Meta dataset ownership, privacy policy, GitHub repository and trust | Milestones 4–5 | Server-side CAPI implemented locally; US-only target market and immediate attribution capture; GPC suppresses views; requested Lead exception under review; main-to-beta gate and release-to-production deployment |
 
 ## Session handoff protocol
 
@@ -345,9 +352,7 @@ GitHub documents [AWS OIDC authentication and repository/branch trust](https://d
 Use the subject format actually issued to this repository, including immutable
 IDs where applicable; do not copy another repository's trust condition.
 
-Meta implementation references for milestone 4:
-[Pixel setup](https://developers.facebook.com/docs/meta-pixel/get-started/) and
-[conversion events](https://developers.facebook.com/docs/meta-pixel/implementation/conversion-tracking/).
-These pages returned HTTP 429 during this planning session; their current content
-was not verified. Confirm exact initialization, consent and event behavior during
-the detailed Meta plan. The browser integration above is the proposed design.
+Meta implementation references and verification limits are recorded in the
+[milestone 4 plan](milestone-4-plan.md#references).
+Meta documentation returned HTTP 429 during research; confirm current API details
+with the direct POST test before live enablement.

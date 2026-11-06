@@ -16,7 +16,7 @@ release = $(if $(strip $(RELEASE)),--release $(call quote,$(RELEASE)))
 no_dry_run = $(if $(filter 0,$(DRY_RUN)),,$(error This target does not support DRY_RUN; use cloud-diff for infrastructure previews))
 
 .PHONY: help cloud-preflight cloud-diff cloud-deploy beta-auth beta-enabled \
-        sources-import sources-pull images-ensure images-check \
+        sources-import sources-pull images-prepare images-ensure images-check \
         site-build site-publish site-verify site-rollback signup-secrets signup-preflight signup-status signup-enabled
 
 help:
@@ -29,6 +29,7 @@ help:
 	  '  make cloud-deploy PROFILE=flat-girl STACK=certificates' \
 	  '  make beta-auth PROFILE=flat-girl' \
 	  '  make beta-enabled PROFILE=flat-girl ENABLED=false' \
+	  '  make images-prepare  (discover raw images, refresh manifest and render locally)' \
 	  '  make sources-import PROFILE=flat-girl DRY_RUN=1' \
 	  '  make sources-pull PROFILE=flat-girl' \
 	  '  make images-ensure PROFILE=flat-girl DRY_RUN=1' \
@@ -44,6 +45,7 @@ help:
 	  '' \
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
 	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
+	  'Meta: make meta-secrets/meta-config/meta-status/meta-test; see cloud/META.md.' \
 	  'See cloud/ACCESS.md and cloud/DEPLOYMENT.md for rollout order.'
 
 cloud-preflight:
@@ -60,6 +62,9 @@ beta-auth:
 
 beta-enabled:
 	$(no_dry_run)$(PYTHON) tools/cloud.py beta-enabled $(profile) --value $(call required,ENABLED)
+
+images-prepare:
+	$(if $(filter 0,$(DRY_RUN)),,$(error images-prepare does not support DRY_RUN; it updates the local manifest and outputs))$(PYTHON) tools/prepare_images.py --refresh-manifest
 
 sources-import:
 	$(PYTHON) tools/remote_images.py sources import $(profile) $(dry_run)
@@ -96,3 +101,16 @@ signup-status:
 
 signup-enabled:
 	$(PYTHON) tools/signup.py enabled $(profile) $(site_env) --value $(call required,ENABLED) $(dry_run)
+
+.PHONY: meta-secrets meta-config meta-status meta-test
+meta-secrets:
+	$(no_dry_run)$(PYTHON) tools/meta.py secrets $(profile) $(site_env)
+
+meta-config:
+	$(PYTHON) tools/meta.py configure $(profile) $(site_env) $(if $(strip $(MODE)),--mode $(call quote,$(MODE))) $(if $(strip $(GRAPH_VERSION)),--version $(call quote,$(GRAPH_VERSION))) $(if $(filter false,$(VIEW_ENABLED)),--no-view) $(if $(filter false,$(LEAD_ENABLED)),--no-lead) $(if $(filter false,$(CAPTURE_ENABLED)),--no-capture) $(dry_run)
+
+meta-status:
+	$(PYTHON) tools/meta.py status $(profile) $(site_env)
+
+meta-test:
+	$(no_dry_run)$(PYTHON) tools/meta.py test $(profile) $(site_env) --event $(call required,EVENT)

@@ -1,6 +1,6 @@
 # Flat Girl AWS hosting
 
-Infrastructure and deployment tooling for completed milestones 2–3. Hosting and
+Infrastructure and deployment tooling for completed milestones 2–3 and local milestone 4 implementation. Hosting and
 signup were deployed by the user. Start with [access setup](ACCESS.md), then follow
 [deployment](DEPLOYMENT.md). [Signup](SIGNUP.md) covers the live notification
 services; [Images](IMAGES.md) describes source recovery and the shared CDN.
@@ -44,3 +44,6 @@ CDK synthesizes inline templates without CDK bootstrap or asset publishing.
 Local commands execute explicit stacks; certificate must precede the sites.
 Templates exceeding the inline size limit fail instead of gaining implicit
 asset-upload privileges. The shared certificate is retained on removal.
+
+[Meta CAPI](META.md) adds environment-specific SQS delivery, durable DynamoDB event records, and Lambda@Edge tracking.
+It is local-only until the operator completes setup and rollout.

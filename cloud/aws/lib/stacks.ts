@@ -6,6 +6,8 @@ import * as iam from 'aws-cdk-lib/aws-iam'
 import * as dns from 'aws-cdk-lib/aws-route53'
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as lambda from 'aws-cdk-lib/aws-lambda'
+import { edgeName, metaQueueName, lambdaCode, edgeRouteCode, codeHash } from './meta.js'
 import type { Construct } from 'constructs'
 import { bucketName, roleArn, stacks, type Config } from './config.js'
 import { routeCode } from './routes.js'
@@ -57,8 +59,25 @@ export class Site extends Base {
     Tags.of(this).add('Environment',env)
     const kvs=beta?new cf.KeyValueStore(this,'Auth',{keyValueStoreName:'flat-girl-beta-auth'}):undefined
     if(kvs) kvs.applyRemovalPolicy(RemovalPolicy.RETAIN)
-    const routes=new cf.Function(this,'Routes',{functionName:`flat-girl-${env}-routes`,runtime:cf.FunctionRuntime.JS_2_0,
-      code:cf.FunctionCode.fromInline(routeCode(host,beta)),keyValueStore:kvs})
+    const routes=beta?new cf.Function(this,'Routes',{functionName:`flat-girl-${env}-routes`,runtime:cf.FunctionRuntime.JS_2_0,
+      code:cf.FunctionCode.fromInline(routeCode(host,beta)),keyValueStore:kvs}):undefined
+    const edgeVersion=(id:string,name:string,code:string)=>{
+      const fn=new lambda.CfnFunction(this,id,{functionName:name,runtime:"nodejs24.x",architectures:["x86_64"],
+        handler:"index.handler",code:{zipFile:code},memorySize:128,timeout:5,
+        role:`arn:aws:iam::${p.account}:role/${edgeName(env)}`})
+      fn.applyRemovalPolicy(RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE)
+      const version=new lambda.CfnVersion(this,`${id}Version${codeHash(code)}`,{functionName:fn.ref})
+      version.applyRemovalPolicy(RemovalPolicy.RETAIN)
+      return lambda.Version.fromVersionArn(this,`${id}Published`,`${fn.attrArn}:${version.attrVersion}`)
+    }
+    const tracking=edgeVersion("MetaEdge",edgeName(env),lambdaCode("edge",env,`https://sqs.us-east-1.amazonaws.com/${p.account}/${metaQueueName(env)}`))
+    const routing=beta?undefined:edgeVersion("EdgeRoutes","flat-girl-production-edge-routes",edgeRouteCode())
+    const forwarding=beta?new cf.OriginRequestPolicy(this,"MetaForwarding",{
+      cookieBehavior:cf.OriginRequestCookieBehavior.allowList("_fbc_beta"),
+      headerBehavior:cf.OriginRequestHeaderBehavior.allowList("Sec-GPC","User-Agent","Purpose","Sec-Purpose"),
+      // Lambda@Edge origin events require all query strings for query access. Beta is uncached.
+      queryStringBehavior:cf.OriginRequestQueryStringBehavior.all(),
+    }):undefined
     const custom: cf.ResponseHeadersPolicyProps['customHeadersBehavior']={customHeaders:[]}
     if(beta || p.productionNoindex) custom.customHeaders.push({header:'X-Robots-Tag',value:'noindex, nofollow, noarchive',override:true})
     if(beta) custom.customHeaders.push({header:'Cache-Control',value:'no-store',override:true})
@@ -73,13 +92,17 @@ export class Site extends Base {
       domainNames:domains,certificate,defaultRootObject:'index.html',minimumProtocolVersion:cf.SecurityPolicyProtocol.TLS_V1_2_2021,
       defaultBehavior:{origin:S3BucketOrigin.withOriginAccessControl(bucket),viewerProtocolPolicy:cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods:cf.AllowedMethods.ALLOW_GET_HEAD,compress:true,cachePolicy:cache,responseHeadersPolicy:headers,
-        functionAssociations:[{eventType:cf.FunctionEventType.VIEWER_REQUEST,function:routes}]},
+        originRequestPolicy:forwarding,
+        functionAssociations:routes?[{eventType:cf.FunctionEventType.VIEWER_REQUEST,function:routes}]:undefined,
+        edgeLambdas:[{eventType:beta?cf.LambdaEdgeEventType.ORIGIN_RESPONSE:cf.LambdaEdgeEventType.VIEWER_RESPONSE,functionVersion:tracking},
+          ...(routing?[{eventType:cf.LambdaEdgeEventType.VIEWER_REQUEST,functionVersion:routing}]:[])]},
       errorResponses:[403,404].map(httpStatus=>({httpStatus,ttl:Duration.seconds(0)}))})
     const zone=this.zone()
     domains.forEach((name,i)=>{const props={zone,recordName:name,target:dns.RecordTarget.fromAlias(new CloudFrontTarget(distribution))};
       new dns.ARecord(this,`A${i}`,props);new dns.AaaaRecord(this,`AAAA${i}`,props)})
     this.output('SiteUrl',`https://${host}`);this.output('BucketName',bucket.bucketName)
     this.output('DistributionId',distribution.distributionId);this.output('DistributionDomainName',distribution.distributionDomainName)
+    this.output('MetaEdgeVersionArn',tracking.functionArn)
     if(kvs) this.output('AuthStoreArn',kvs.keyValueStoreArn)
   }
 }

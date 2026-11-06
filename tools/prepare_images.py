@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -33,7 +34,22 @@ def source_info(path):
 
 def prepare(root=ROOT, check=False, refresh=False):
     manifest_path = root / "images/manifest.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() or not refresh else {"images": []}
+    if refresh:
+        files = {asset["file"] for asset in manifest["images"]}
+        ids = {asset["id"] for asset in manifest["images"]}
+        for path in sorted((root / "images/raw").iterdir()):
+            if (not path.is_file() or path.is_symlink() or path.name.startswith('.') or
+                    path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or path.name in files):
+                continue
+            base = re.sub(r'[^a-z0-9]+', '-', path.stem.lower()).strip('-') or 'image'
+            identifier, suffix = base, 2
+            while identifier in ids:
+                identifier = f'{base}-{suffix}'
+                suffix += 1
+            ids.add(identifier)
+            manifest["images"].append({"id": identifier, "file": path.name,
+                                       "alt": re.sub(r'[_-]+', ' ', path.stem).strip()})
     recipes = json.loads((root / "images/recipes.json").read_text())
     widths = recipes["widths"]
     if not widths or any(type(w) is not int or w <= 0 for w in widths):
@@ -52,7 +68,7 @@ def prepare(root=ROOT, check=False, refresh=False):
         if refresh:
             asset.update(actual)
         elif any(asset.get(key) != value for key, value in actual.items()):
-            raise ValueError(f"Source changed: {asset['file']}. Use --refresh-manifest for intentional changes.")
+            raise ValueError(f"Source changed: {asset['file']}. Run make images-prepare for intentional changes.")
         with Image.open(source_path) as source:
             image = ImageOps.exif_transpose(source).convert("RGBA")
             # Rebuild pixels without carrying EXIF/ICC metadata into the WebP.
@@ -113,7 +129,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Verify outputs without writes")
-    mode.add_argument("--refresh-manifest", action="store_true", help="Accept intentional source replacements")
+    mode.add_argument("--refresh-manifest", action="store_true", help="Discover new raw images and accept intentional source replacements")
     args = parser.parse_args()
     try:
         prepare(check=args.check, refresh=args.refresh_manifest)
