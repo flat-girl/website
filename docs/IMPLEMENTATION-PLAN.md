@@ -1,7 +1,7 @@
 # Boring Flat Girl — implementation roadmap
 
 Planning baseline: November 5, 2026. Milestones 1–2 are complete;
-beta/production hosting is live-verified. Milestones 3–6 are pending.
+beta/production hosting is live-verified. Milestone 3 is locally implemented with live rollout pending; milestones 4–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.
@@ -176,19 +176,26 @@ Passing synthesis or IAM simulation alone is not deployment verification.
 
 ### 3. Turnstile and Brevo signup — roughly 4–8 hours
 
+**Status:** [local implementation and checks complete; live rollout pending](milestone-3-plan.md#implementation-handoff--november-5-2026).
+See the [signup runbook](../cloud/SIGNUP.md). Beta uses its own test list. The form has an explanatory blurb,
+no consent checkbox, and no custom consent timestamps or wording-version tracking.
+Beta list **5** and production list **4** share provider keys and one Turnstile
+widget. Brevo owns the welcome email; the backend manages list membership only.
+
 **Outcome:** visitors can request a launch notification successfully.
 
-1. Confirm provider ownership and create a Flat Girl Turnstile widget and Brevo
-   list. Keep business audiences isolated. Document a local, private secret-entry
+1. Confirm provider ownership and use the shared Flat Girl Turnstile widget and
+   existing Brevo lists (beta 5, production 4). Keep business audiences isolated. Document a local, private secret-entry
    command that writes SSM parameters without printing values or needing GitHub.
 2. Adapt the synchronous Big Naturals API/Lambda flow at
-   `https://api.flatgirl.net/subscribe`: validate request size/email/consent,
+   `https://api.flatgirl.net/subscribe`: validate request size/email,
    honeypot, expected origin and Turnstile hostname/action before contacting
    Brevo. Turnstile verification must occur server-side; CORS is not bot protection.
 3. Preserve existing subscribers, unsubscribes and suppression. Use generic
    acceptance responses that do not reveal membership. Default to single opt-in
-   as in Big Naturals; record consent source/time and text version through an
-   agreed Brevo configuration without overwriting historical consent.
+   as in Big Naturals. Explain the requested launch notification beside the
+   submit button; no extra checkbox or custom consent-history storage. Use a
+   separate beta test list and preserve existing contact attributes.
 4. Add a minimal accessible form to the scaffold and connect submitting/success/error states, accessible feedback,
    token expiry/reset, retry and timeout handling. Define practical throttling
    for expected advertising bursts instead of inheriting Big Naturals' small
@@ -200,7 +207,8 @@ Passing synthesis or IAM simulation alone is not deployment verification.
 
 **Done when:** a real valid signup reaches the correct list, rejected requests
 do not write contacts, suppression is preserved, and failure/retry behavior works.
-No welcome or launch email is sent by this backend. Brevo sender authentication,
+No welcome or launch email is sent by this backend; Brevo automation handles the
+welcome email. Brevo sender authentication,
 unsubscribe handling and the eventual campaign need their own operational setup
 before sending; do not configure or send campaigns implicitly.
 
@@ -305,7 +313,7 @@ launch campaign remain separate operational work.
 | Product photos, brand direction, dimensions/materials and included items | Milestone 6 | Supplied Sarah front/back images test milestone 1's pipeline; final assets/facts deferred |
 | Release year/time, eligible destinations and arrival guarantee cutoff | Milestone 6 / before launch | 500 units; provisional November 27, 2026; arrival before Christmas confirmed |
 | AWS account, domain DNS, operator access and dedicated image library | Milestone 2 | Discover/confirm; do not inherit other projects' resource identities |
-| Brevo/Cloudflare ownership, list/widget, consent and notification sender | Milestone 3 | Dedicated Flat Girl audience/widget; single opt-in proposed |
+| Brevo/Cloudflare ownership, list/widget and notification sender | Milestone 3 | Beta list 5 / production list 4; shared provider keys/widget; blurb without checkbox or consent-history tracking; Brevo-managed welcome email |
 | Meta ownership/Pixel ID, privacy markets, GitHub repository and trust | Milestones 4–5 | Browser Pixel with opt-in baseline; main-to-beta dev gate and release-to-production deployment |
 
 ## Session handoff protocol

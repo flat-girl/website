@@ -4,6 +4,9 @@ Minimal Nuxt + Tailwind static site: a heading, Sarah front/back carousel,
 and full-size image links. Milestones 1–2 are complete; beta and production are
 deployed and verified. Production: <https://flatgirl.net>.
 Final landing-page content and branding come later.
+Milestone 3 signup is implemented locally with beta list **5**, production list
+**4**, shared provider keys, and a Brevo-managed welcome email. Both environments
+start disabled until the [signup rollout](cloud/SIGNUP.md) is completed.
 See the [roadmap](docs/IMPLEMENTATION-PLAN.md) and
 [milestone 1 plan](docs/milestone-1-plan.md).
 
@@ -71,6 +74,7 @@ npm run test:images --prefix web
 npm run generate --prefix web
 npm run images:check --prefix web
 npm run test:e2e --prefix web
+npm run test:signup --prefix web
 ```
 
 Browser checks use installed Google Chrome and start/stop a static preview server.

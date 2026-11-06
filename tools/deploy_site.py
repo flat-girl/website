@@ -23,6 +23,7 @@ from aws_common import AWS,AwsError,bucket,project
 from image_plan import IMMUTABLE,digest
 from prepare_images import ROOT,sha256,write_json
 from remote_images import ensure,destinations,remote_variant,immutable_upload,checksum64
+from signup import config as signup_config, public_settings, validate_public, build_environment
 
 MUTABLE='public, max-age=0, s-maxage=60, must-revalidate'
 ROOT_FILES={'index.html','200.html','404.html','_payload.json','robots.txt','build.json','favicon.ico','favicon.svg','sitemap.xml'}
@@ -70,6 +71,7 @@ def validate_artifact(directory,env,p):
     files=file_manifest(directory/'public')
     if files!=manifest.get('files') or digest(files)!=manifest.get('artifactDigest'):raise ValueError('Artifact files differ from manifest')
     if manifest.get('imageOrigin')!=manifest.get('images',{}).get('origin'):raise ValueError('Artifact image origin differs')
+    if 'signup' in manifest:validate_public(manifest['signup'],env)
     return manifest
 
 def verify_images(aws,receipt):
@@ -90,7 +92,12 @@ def build(aws,env):
     output=ROOT/'web/.output'
     if output.is_symlink():raise ValueError('Refusing symlinked generated output')
     if output.exists():shutil.rmtree(output)
-    settings=dict(os.environ,FLAT_GIRL_IMAGE_MODE='cdn',FLAT_GIRL_NOINDEX=str(noindex).lower())
+    signup=public_settings(signup_config(),env)
+    if signup['enabled']:
+        service=aws.outputs('signup-'+env)
+        if service.get('SignupEndpoint')!=signup['endpoint'] or service.get('SignupEnabled')!='true' or service.get('BrevoListId')!=str(5 if env=='beta' else 4):
+            raise ValueError('Enable and verify the matching signup backend before building the enabled form')
+    settings=build_environment(dict(os.environ,FLAT_GIRL_IMAGE_MODE='cdn',FLAT_GIRL_NOINDEX=str(noindex).lower()),signup)
     subprocess.run(['npm','run','generate','--prefix','web'],cwd=ROOT,env=settings,check=True)
     public=output/'public'
     (public/'robots.txt').write_text('User-agent: *\nDisallow: /\n' if noindex else 'User-agent: *\nAllow: /\n')
@@ -99,7 +106,7 @@ def build(aws,env):
     write_json(public/'build.json',dict(release=release,environment=env,revision=revision,dirty=dirty))
     files=file_manifest(public)
     manifest=dict(version=1,release=release,environment=env,account=aws.p['account'],siteUrl=out['SiteUrl'],revision=revision,dirty=dirty,
-                  noindex=noindex,imageOrigin=receipt['origin'],images=receipt,files=files,artifactDigest=digest(files))
+                  noindex=noindex,imageOrigin=receipt['origin'],images=receipt,signup=signup,files=files,artifactDigest=digest(files))
     target=release_dir(env,release)
     if target.exists():raise ValueError('Release directory already exists')
     target.mkdir(parents=True)

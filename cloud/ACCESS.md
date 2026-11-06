@@ -38,6 +38,12 @@ administrator profile when available.
 make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
 ```
 
+Use this same command for later access-stack updates, including milestone 3's
+signup permissions. `BOOTSTRAP=1` is the explicit access-stack administration
+flag, not a first-deployment-only flag. No `flat-girl-admin` profile is required
+or created by this project; `default` is the existing administrative profile in
+this setup. Use `flat-girl` for the subsequent non-access stack operations.
+
 This creates the operator user (when configured), operator role, CloudFormation
 execution role, and separate beta/production publisher roles. It creates no
 password, key, GitHub OIDC trust, hosting resources, or DNS records.
@@ -91,8 +97,8 @@ Renew login when a session expires; role chaining can limit session duration.
 | Identity | Intended permission |
 | --- | --- |
 | Administrator | Owns the access stack and private human sign-in setup |
-| Project operator | Manages four named non-access stacks, passes only the CloudFormation role, imports originals, ensures variants, rotates beta auth, assumes publisher roles |
-| CloudFormation role | Manages the four named buckets, domain/validation DNS records, certificates, and CloudFront resources; no IAM administration |
+| Project operator | Manages six named non-access stacks, passes only the CloudFormation role, imports originals, ensures variants, rotates beta auth/shared signup secrets, reads signup health, assumes publisher roles |
+| CloudFormation role | Manages hosting plus signup Lambda/API/log/metric/alarm resources and their DNS/certificates; passes only the two signup runtime roles; may create the AWS-managed API Gateway service-linked role |
 | Beta publisher | Beta site writes, shared source reads/variant additions, beta release archives, beta invalidations; no production site writes |
 | Production publisher | Equivalent production scope; no beta site writes |
 
@@ -105,7 +111,26 @@ only the beta stack's store. Create/list APIs needing `*` are documented in
 frontend/CI identity. Review this breadth before bootstrap; OIDC/CI comes later.
 
 Publishers explicitly deny object/version deletion and have no IAM administration.
-Their distribution permissions use Project/Environment tags. Live IAM behavior,
+They have no signup-secret access. Milestone 3 adds two runtime roles in the
+administrator-managed access stack; both read only the shared
+`/flat-girl/signup/turnstile-secret` and `/flat-girl/signup/brevo-api-key`
+SecureStrings and write their own Lambda logs. No custom KMS key is used.
+
+API Gateway lifecycle permissions cover regional `/apis/*` because API IDs are
+generated, plus the two exact custom domain names and tagging APIs. This grants
+the infrastructure execution role broader regional API management, not the
+publisher/runtime roles. Review that scope with the access diff. The only added
+IAM creation permission is restricted to API Gateway's AWS-managed service-linked
+role. Ordinary runtime roles/policies are still created by the administrator.
+The policy includes Stage handler permissions `apigateway:TagResource` and
+`apigateway:UntagResource`, plus `AddCertificateToDomain` and
+`RemoveCertificateFromDomain` restricted to the two signup domain ARNs. These
+named actions are required in addition to the HTTP verb permissions; the initial
+signup rollout exposed the missing Stage tagging permission. The correction was
+checked against AWS's registered resource-handler schemas.
+The full signup rollout is in [SIGNUP.md](SIGNUP.md).
+
+Publisher distribution permissions use Project/Environment tags. Live IAM behavior,
 organization restrictions, certificate issuance, and create/update/recovery are
 not proven by synthesis or local assertions and remain rollout checks.
 

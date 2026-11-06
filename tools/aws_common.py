@@ -8,6 +8,7 @@ import tempfile
 from prepare_images import ROOT, write_json
 
 STACKS=dict(access='FlatGirlAccess',certificates='FlatGirlCertificates',images='FlatGirlImages',beta='FlatGirlBetaSite',production='FlatGirlProductionSite')
+STACKS.update({'signup-beta':'FlatGirlBetaSignup','signup-production':'FlatGirlProductionSignup'})
 
 def project():
     path=ROOT/'cloud/aws/project.json'

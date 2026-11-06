@@ -125,3 +125,16 @@ There is no earlier production release on the first rollout. Recover by fixing
 forward, or review disabling the new distribution while repairing it. If domain
 content existed before a later rollout, preserve and use its documented DNS target.
 Do not claim rollback succeeded until the restored bytes have been verified live.
+
+## Signup build settings (milestone 3)
+
+The signup backend rollout and shared-secret setup are in [SIGNUP.md](SIGNUP.md).
+`make site-build` reads `cloud/signup.json` for the selected environment and
+explicitly bakes the endpoint, enabled flag, environment, and shared public site
+key into Nuxt. An enabled build requires matching enabled signup-stack outputs.
+Publisher roles never read provider secrets. Public settings are recorded in the
+private release manifest; old milestone 2 manifests remain valid without them.
+
+Changing a flag/key requires a new site build. Backend disable is a separate
+stack update and stops provider writes from cached pages once it completes.
+Frontend rollback does not undo contacts or Brevo welcome emails.
