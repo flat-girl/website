@@ -126,7 +126,9 @@ def main(kind):
                 print(f'Original verified: {source["id"]}')
             elif args.dry_run: print(f'Would import {source["id"]}')
             else:
-                immutable_upload(aws,outputs['SourceBucketName'],source_key(source),path,'image/png',{'sha256':source['sha256']},'private, no-store')
+                with Image.open(path) as image:
+                    content_type = Image.MIME[image.format]
+                immutable_upload(aws,outputs['SourceBucketName'],source_key(source),path,content_type,{'sha256':source['sha256']},'private, no-store')
                 print(f'Original imported: {source["id"]}')
 
 if __name__=='__main__':

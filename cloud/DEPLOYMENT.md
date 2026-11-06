@@ -25,10 +25,15 @@ make beta-auth PROFILE=flat-girl
 Wait for certificate/DNS/CloudFront completion. An empty or unavailable auth store
 denies access. Credential setup prompts privately for a username and password.
 There is no password-length minimum beyond requiring a nonempty value. Only its
-authorization digest reaches KVS. The AWS CLI
+authorization digest reaches SSM (used by the shared Lambda@Edge router) and
+the retained KVS (rollback compatibility). The AWS CLI
 adapter uses a mode-600 temporary JSON file, deleted on command completion, to
 keep the digest out of arguments/logs; it never writes the password. Ordinary
-stack updates preserve KVS contents.
+stack updates preserve stored credentials. Existing deployments should first use
+`make beta-auth-migrate PROFILE=flat-girl` after the access update; this preserves
+the password. See [META.md section 6](META.md#6-align-beta-and-production-edge-execution).
+Beta and production now share viewer handlers and cache settings; the beta router
+authenticates requests before cached content is served.
 
 The shared certificate covers apex/www/beta, independent of the beta stack.
 Only project A/AAAA and ACM validation records are managed. Preserve existing
@@ -76,7 +81,7 @@ browser. Offline Chrome checks cover the same frontend with fixture image respon
    ```
 
 4. Run `make beta-auth PROFILE=flat-girl`; verify the new credential
-   works and the old credential is rejected after edge propagation.
+   works and the old credential is rejected after the 60-second auth cache expires.
 5. Record results in `docs/milestone-2-plan.md` without passwords or digests.
 
 Verified publication records are stored with private archives. Rollback requires

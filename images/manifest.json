@@ -17,6 +17,69 @@
       "bytes": 2527557,
       "width": 1696,
       "height": 2528
+    },
+    {
+      "id": "flatgirl-shoota-bed02",
+      "file": "FlatGirl_ShootA_Bed02.jpg",
+      "alt": "FlatGirl ShootA Bed02",
+      "sha256": "e060230d049f1e4eea8d59f17e46f61aa87c9bebace30a9e2ba1e12ca53626a9",
+      "bytes": 1106793,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-chair03",
+      "file": "FlatGirl_ShootA_Chair03.jpg",
+      "alt": "FlatGirl ShootA Chair03",
+      "sha256": "56721087381b42e8042c64d83f623f71952c0ff6e8f8508b9e1567eb38f29a7b",
+      "bytes": 1293317,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-chair04",
+      "file": "FlatGirl_ShootA_Chair04.jpg",
+      "alt": "FlatGirl ShootA Chair04",
+      "sha256": "00de2b1731923ec2fd7acb9029708d24372b1a098e3e91adc36e79fa01a9254b",
+      "bytes": 1337448,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-couch04",
+      "file": "FlatGirl_ShootA_Couch04.jpg",
+      "alt": "FlatGirl ShootA Couch04",
+      "sha256": "4863d7f2b6dcf0a62bf50a45f534aca392e05e41335772f144b5851124dc777a",
+      "bytes": 1025696,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-outside01",
+      "file": "FlatGirl_ShootA_Outside01.jpg",
+      "alt": "FlatGirl ShootA Outside01",
+      "sha256": "ee5314f3dbad754171eef24328ad155073e4c7a82eb2e89d9d069470ba12f200",
+      "bytes": 1637827,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-rug02back",
+      "file": "FlatGirl_ShootA_Rug02Back.jpg",
+      "alt": "FlatGirl ShootA Rug02Back",
+      "sha256": "bc022bf3361e088bfc6802148a4cd994d9a3b0ea246ac9d8dd9977c28bdd9319",
+      "bytes": 1773241,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-rug02front",
+      "file": "FlatGirl_ShootA_Rug02Front.jpg",
+      "alt": "FlatGirl ShootA Rug02Front",
+      "sha256": "4f5b317a0b0f06cc7c58b36c911688a545fd49ccee8d99d6c06c46c6582092f4",
+      "bytes": 1794553,
+      "width": 1080,
+      "height": 1440
     }
   ]
 }

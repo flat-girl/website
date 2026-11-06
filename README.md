@@ -8,7 +8,9 @@ Final landing-page content and branding come later.
 Signup is enabled with beta list **5**, production list **4**, shared provider
 keys, and a Brevo-managed welcome email. See the [signup runbook](cloud/SIGNUP.md)
 and [milestone 3 completion handoff](docs/milestone-3-plan.md#completion-handoff--november-5-2026).
-Next: plan milestone 4, Meta Pixel and tracking consent.
+Milestone 4 Meta CAPI is implemented and checked locally with SQS delivery, durable DynamoDB event records, and a
+dedicated beta dataset. See the [plan](docs/milestone-4-plan.md) and
+[Meta setup/runbook](cloud/META.md); it has not been deployed.
 See the [roadmap](docs/IMPLEMENTATION-PLAN.md) and
 [milestone 1 plan](docs/milestone-1-plan.md).
 
@@ -46,11 +48,11 @@ paths as files, not rewrite them to HTML. There is no production Nuxt server.
 `tools/prepare_images.py` uses Pillow with uv-locked dependencies:
 
 ```sh
-uv run --locked --project tools python tools/prepare_images.py
+make images-prepare
 uv run --locked --project tools python tools/prepare_images.py --check
 ```
 
-Raw PNGs stay in ignored `images/raw/`. Clean WebPs and metadata go to ignored
+Raw PNG/JPEG/WebP files stay in ignored `images/raw/`. Clean WebPs and metadata go to ignored
 `images/processed/`. Only listed WebPs are copied to `web/public/variants/`;
 metadata is imported into the app from generated source. Each image has 480px,
 960px, and native-resolution versions. The full-size version loads when its link
@@ -58,13 +60,17 @@ is opened. Normal carousel display uses the smaller two with responsive markup.
 
 Output URLs fingerprint the source, transform, Pillow/libwebp versions, and
 renderer revision. Unchanged runs reuse validated outputs. Missing/corrupt local
-outputs are regenerated. Intentional source changes require a manifest refresh:
+outputs are regenerated. After adding or replacing files in `images/raw/`, run:
 
 ```sh
-uv run --locked --project tools python tools/prepare_images.py --refresh-manifest
+make images-prepare
 ```
 
-Review and commit the manifest diff; never commit raw/processed image directories.
+This discovers new PNG/JPEG/WebP files, adds manifest entries with filename-based
+IDs and default alt text, refreshes source checksums/dimensions, and prepares variants.
+Existing IDs, alt text and order are preserved; new files append in filename order.
+No manual manifest entry or AWS profile is needed. Review the generated alt text
+and commit the manifest diff; never commit raw/processed image directories.
 Keep old published variants for rollback. [Shared image commands](cloud/IMAGES.md)
 now provide conditional CDN uploads and verified URL receipts.
 

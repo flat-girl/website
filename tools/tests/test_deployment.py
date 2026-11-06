@@ -15,6 +15,7 @@ from remote_images import ensure,remote_variant,immutable_upload,checksum64,rest
 from aws_common import AwsError,bucket
 from deploy_site import classify,file_manifest,publish_files,validate_artifact,archive,restore_release,redirect_matches,check_redirect
 from image_plan import digest
+import remote_images
 
 class FakeAWS:
     p={'account':'123456789012','region':'us-east-1'}
@@ -35,6 +36,21 @@ def fixture(root):
     write_json(root/'images/recipes.json',dict(widths=[20,40],quality=85,fullQuality=90))
 
 class DeploymentTests(unittest.TestCase):
+    def test_discovered_sources_upload_with_their_actual_image_content_type(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(d)
+            fixture(root)
+            for name in ['photo.jpg', 'photo.webp']:
+                Image.new('RGB', (10, 15)).save(root / 'images/raw' / name)
+            prepare(root, refresh=True)
+            aws = FakeAWS()
+            with patch.object(remote_images, 'ROOT', root), patch.object(remote_images, 'project', return_value=aws.p), \
+                 patch.object(remote_images, 'AWS', return_value=aws), patch.object(remote_images, 'plan', side_effect=lambda: plan(root)), \
+                 patch.object(sys, 'argv', ['remote_images.py', 'import', '--profile', 'fixture']):
+                remote_images.main('sources')
+            self.assertEqual({obj['ContentType'] for obj in aws.objects.values()}, {'image/png', 'image/jpeg', 'image/webp'})
+            self.assertEqual(len(aws.uploads), 3)
+
     def test_redirects_ignore_key_order_but_preserve_destination_and_values(self):
         expected='https://beta.flatgirl.net/?utm_source=check&x=1&x=2&empty='
         actual='https://beta.flatgirl.net/?x=1&x=2&empty=&utm_source=check'

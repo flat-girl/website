@@ -3,6 +3,7 @@ import type { Construct } from 'constructs'
 import { RemovalPolicy } from 'aws-cdk-lib'
 import { Base } from './stacks.js'
 import { bucketName, roleArn, stacks, type Config } from './config.js'
+import { metaParameters, edgeName, metaQueueName, metaWorkerName, eventTableName, edgeRouteName, betaAuthParameter } from './meta.js'
 import { signupNames, signupParameters } from './signup-config.js'
 
 export class Access extends Base {
@@ -26,7 +27,7 @@ export class Access extends Base {
     operator.addToPolicy(statement(['cloudformation:*'],stackArns))
     operator.addToPolicy(statement(['iam:PassRole'],[execution.roleArn],{StringEquals:{'iam:PassedToService':'cloudformation.amazonaws.com'}}))
     operator.addToPolicy(statement(['cloudfront:DescribeKeyValueStore'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
-    operator.addToPolicy(statement(['cloudfront-keyvaluestore:DescribeKeyValueStore','cloudfront-keyvaluestore:PutKey'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
+    operator.addToPolicy(statement(['cloudfront-keyvaluestore:DescribeKeyValueStore','cloudfront-keyvaluestore:GetKey','cloudfront-keyvaluestore:PutKey'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
     const buckets=['sources','variants','beta','production'].map(kind=>`arn:aws:s3:::${bucketName(p,kind)}`)
     execution.addToPolicy(statement(['s3:*'],buckets.flatMap(arn=>[arn,`${arn}/*`])))
     execution.addToPolicy(statement(['route53:GetHostedZone','route53:ListResourceRecordSets'],[`arn:aws:route53:::hostedzone/${p.hostedZoneId}`]))
@@ -66,7 +67,62 @@ export class Access extends Base {
       const logs=`arn:aws:logs:${p.region}:${p.account}:log-group:${names.logs}`
       const functionArn=`arn:aws:lambda:${p.region}:${p.account}:function:${names.function}`
       const runtime=new iam.Role(this,`${env}SignupRuntime`,{roleName:names.role,assumedBy:new iam.ServicePrincipal('lambda.amazonaws.com')})
-      runtime.addToPolicy(statement(['ssm:GetParameter'],parameters))
+      const meta=Object.values(metaParameters(env)).map(name=>`arn:aws:ssm:${p.region}:${p.account}:parameter${name}`)
+      operator.addToPolicy(statement(['ssm:GetParameter','ssm:PutParameter'],meta))
+      runtime.addToPolicy(statement(['ssm:GetParameter'],[...parameters,meta[0]]))
+      const edgeRole=new iam.Role(this,`${env}MetaEdgeRuntime`,{roleName:edgeName(env),
+        assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
+      const queueArn=`arn:aws:sqs:${p.region}:${p.account}:${metaQueueName(env)}`
+      for(const producer of [runtime,edgeRole]) producer.addToPolicy(statement(['sqs:SendMessage'],[queueArn]))
+      const workerName=metaWorkerName(env),workerArn=`arn:aws:lambda:${p.region}:${p.account}:function:${workerName}`
+      const workerLogs=`arn:aws:logs:${p.region}:${p.account}:log-group:/aws/lambda/${workerName}`
+      const workerRole=new iam.Role(this,`${env}MetaWorkerRuntime`,{roleName:workerName,assumedBy:new iam.ServicePrincipal('lambda.amazonaws.com')})
+      workerRole.addToPolicy(statement(['ssm:GetParameter'],meta))
+      workerRole.addToPolicy(statement(['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'],[queueArn]))
+      const eventsArn=`arn:aws:dynamodb:${p.region}:${p.account}:table/${eventTableName(env)}`
+      workerRole.addToPolicy(statement(['dynamodb:GetItem','dynamodb:PutItem','dynamodb:UpdateItem'],[eventsArn]))
+      operator.addToPolicy(statement(['dynamodb:DescribeTable','dynamodb:DescribeContinuousBackups','dynamodb:GetItem','dynamodb:Scan'],[eventsArn]))
+      execution.addToPolicy(statement(['dynamodb:CreateTable','dynamodb:DeleteTable','dynamodb:DescribeTable','dynamodb:UpdateTable',
+        'dynamodb:DescribeContinuousBackups','dynamodb:UpdateContinuousBackups',
+        'dynamodb:DescribeTimeToLive','dynamodb:DescribeContributorInsights','dynamodb:DescribeKinesisStreamingDestination',
+        'dynamodb:TagResource','dynamodb:UntagResource','dynamodb:ListTagsOfResource'],[eventsArn]))
+      workerRole.addToPolicy(statement(['logs:CreateLogStream','logs:PutLogEvents'],[`${workerLogs}:*`]))
+      execution.addToPolicy(statement(['iam:PassRole'],[workerRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
+      execution.addToPolicy(statement(['lambda:CreateFunction','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration',
+        'lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:TagResource','lambda:UntagResource','lambda:ListTags'],[workerArn,`${workerArn}:*`]))
+      execution.addToPolicy(statement(['lambda:CreateEventSourceMapping'],['*'],{ArnEquals:{'lambda:FunctionArn':workerArn}}))
+      execution.addToPolicy(statement(['lambda:GetEventSourceMapping','lambda:UpdateEventSourceMapping','lambda:DeleteEventSourceMapping',
+        'lambda:TagResource','lambda:UntagResource','lambda:ListTags'],[`arn:aws:lambda:${p.region}:${p.account}:event-source-mapping:*`]))
+      execution.addToPolicy(statement(['sqs:CreateQueue','sqs:DeleteQueue','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:SetQueueAttributes',
+        'sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'],[queueArn,`${queueArn}-dlq`]))
+      execution.addToPolicy(statement(['logs:CreateLogGroup','logs:DeleteLogGroup','logs:PutRetentionPolicy','logs:DeleteRetentionPolicy',
+        'logs:TagResource','logs:UntagResource','logs:ListTagsForResource','logs:TagLogGroup','logs:UntagLogGroup','logs:ListTagsLogGroup'],[workerLogs,`${workerLogs}:*`]))
+      operator.addToPolicy(statement(['sqs:GetQueueAttributes','sqs:GetQueueUrl'],[queueArn,`${queueArn}-dlq`]))
+      operator.addToPolicy(statement(['lambda:GetFunctionConfiguration'],[workerArn]))
+      operator.addToPolicy(statement(['logs:FilterLogEvents'],[`${workerLogs}:*`]))
+      const routerRole=new iam.Role(this,`${env}EdgeRoutesRuntime`,{roleName:edgeRouteName(env),
+        assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
+      if(env==='beta') {
+        const authArn=`arn:aws:ssm:${p.region}:${p.account}:parameter${betaAuthParameter}`
+        routerRole.addToPolicy(statement(['ssm:GetParameter'],[authArn]))
+        operator.addToPolicy(statement(['ssm:GetParameter','ssm:PutParameter'],[authArn]))
+      }
+      const routerLogs=[`arn:aws:logs:*:${p.account}:log-group:/aws/lambda/us-east-1.${edgeRouteName(env)}:*`,
+        `arn:aws:logs:us-east-1:${p.account}:log-group:/aws/lambda/${edgeRouteName(env)}:*`]
+      routerRole.addToPolicy(statement(['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents'],routerLogs))
+      execution.addToPolicy(statement(['iam:PassRole'],[routerRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
+      const edgeNames=[edgeName(env),edgeRouteName(env)]
+      const edgeArns=edgeNames.map(name=>`arn:aws:lambda:us-east-1:${p.account}:function:${name}`)
+      const edgeLogs=edgeNames.flatMap(name=>[`arn:aws:logs:*:${p.account}:log-group:/aws/lambda/us-east-1.${name}:*`,
+        `arn:aws:logs:us-east-1:${p.account}:log-group:/aws/lambda/${name}:*`])
+      edgeRole.addToPolicy(statement(['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents'],edgeLogs))
+      operator.addToPolicy(statement(['logs:FilterLogEvents'],edgeLogs))
+      operator.addToPolicy(statement(['lambda:GetFunctionConfiguration','lambda:ListVersionsByFunction'],edgeArns))
+      execution.addToPolicy(statement(['iam:PassRole'],[edgeRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
+      execution.addToPolicy(statement(['lambda:CreateFunction','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration',
+        'lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:PublishVersion','lambda:ListVersionsByFunction',
+        'lambda:GetPolicy','lambda:TagResource','lambda:UntagResource','lambda:ListTags','lambda:EnableReplication*','lambda:DisableReplication*'],
+        edgeArns.flatMap(arn=>[arn,`${arn}:*`])))
       runtime.addToPolicy(statement(['logs:CreateLogStream','logs:PutLogEvents'],[`${logs}:*`]))
       execution.addToPolicy(statement(['iam:PassRole'],[runtime.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
       execution.addToPolicy(statement(['lambda:CreateFunction','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration',
@@ -96,6 +152,10 @@ export class Access extends Base {
       `arn:aws:apigateway:${p.region}::/domainnames/api.${p.domain}`,
       `arn:aws:apigateway:${p.region}::/domainnames/beta-api.${p.domain}`,
     ]))
+    execution.addToPolicy(statement(['iam:CreateServiceLinkedRole'],[
+      `arn:aws:iam::${p.account}:role/aws-service-role/replicator.lambda.amazonaws.com/AWSServiceRoleForLambdaReplicator`,
+      `arn:aws:iam::${p.account}:role/aws-service-role/logger.cloudfront.amazonaws.com/AWSServiceRoleForCloudFrontLogger`,
+    ],{StringEquals:{'iam:AWSServiceName':['replicator.lambda.amazonaws.com','logger.cloudfront.amazonaws.com']}}))
     // API Gateway may create its AWS-managed service-linked role on first use.
     execution.addToPolicy(statement(['iam:CreateServiceLinkedRole'],[
       `arn:aws:iam::${p.account}:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway`

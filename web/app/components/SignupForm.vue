@@ -72,7 +72,7 @@ async function submit() {
   try {
     const result = await fetch(config.signupEndpoint, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      credentials: 'omit', redirect: 'error', signal: request.signal,
+      credentials: 'include', redirect: 'error', signal: request.signal,
       body: JSON.stringify({ email: email.value.trim(), website: website.value, turnstileToken: submittedToken }),
     })
     if (!result.ok) {

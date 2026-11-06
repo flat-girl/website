@@ -13,6 +13,53 @@ from prepare_images import prepare, source_info
 
 
 class ImagesTest(unittest.TestCase):
+    def test_refresh_discovers_sources_preserves_editorial_fields_and_reuses_outputs(self):
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(directory)
+            raw = root / 'images/raw'
+            raw.mkdir(parents=True)
+            Image.new('RGB', (12, 16)).save(raw / 'existing.png')
+            existing = dict(id='new-photo', file='existing.png', alt='Keep this description', **source_info(raw / 'existing.png'))
+            manifest = root / 'images/manifest.json'
+            manifest.write_text(json.dumps({'images': [existing]}))
+            (root / 'images/recipes.json').write_text(json.dumps(dict(widths=[8], quality=85, fullQuality=90)))
+            for name in ['New Photo.JPG', 'New_Photo.png', 'other.webp']:
+                Image.new('RGB', (12, 16)).save(raw / name)
+            (raw / '.DS_Store').write_bytes(b'not an image')
+            (raw / 'notes.txt').write_text('ignore')
+            prepare(root, refresh=True)
+            items = json.loads(manifest.read_text())['images']
+            self.assertEqual(items[0], existing)
+            self.assertEqual([item['id'] for item in items], ['new-photo', 'new-photo-2', 'new-photo-3', 'other'])
+            self.assertEqual(items[1]['alt'], 'New Photo')
+            for item in items:
+                self.assertEqual({key: item[key] for key in ['sha256', 'bytes', 'width', 'height']}, source_info(raw / item['file']))
+            paths = [manifest, *root.glob('images/processed/**/*.webp')]
+            times = {path: path.stat().st_mtime_ns for path in paths}
+            prepare(root, refresh=True)
+            self.assertEqual(times, {path: path.stat().st_mtime_ns for path in paths})
+            prepare(root, check=True)
+            (raw / 'existing.png').unlink()
+            with self.assertRaisesRegex(ValueError, 'Missing raw'):
+                prepare(root, refresh=True)
+            self.assertEqual(json.loads(manifest.read_text())['images'], items)
+
+    def test_refresh_can_create_manifest_but_invalid_image_does_not_change_it(self):
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(directory)
+            raw = root / 'images/raw'
+            raw.mkdir(parents=True)
+            Image.new('RGB', (10, 15)).save(raw / 'photo.jpg')
+            (root / 'images/recipes.json').write_text(json.dumps(dict(widths=[8], quality=85, fullQuality=90)))
+            prepare(root, refresh=True)
+            manifest = root / 'images/manifest.json'
+            before = manifest.read_bytes()
+            self.assertEqual(json.loads(before)['images'][0]['file'], 'photo.jpg')
+            (raw / 'broken.png').write_bytes(b'invalid')
+            with self.assertRaises(OSError):
+                prepare(root, refresh=True)
+            self.assertEqual(manifest.read_bytes(), before)
+
     def test_reuse_corruption_and_changed_inputs(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
             root = Path(directory)

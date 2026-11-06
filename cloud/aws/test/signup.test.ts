@@ -160,15 +160,28 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
         ALLOWED_ORIGIN: env === 'beta' ? 'https://beta.flatgirl.net' : 'https://flatgirl.net',
         BREVO_PARAMETER: signupParameters.brevo, TURNSTILE_PARAMETER: signupParameters.turnstile } } })
     template.hasResourceProperties('AWS::ApiGatewayV2::Api', { DisableExecuteApiEndpoint: true, ProtocolType: 'HTTP',
-      CorsConfiguration: { AllowOrigins: [env === 'beta' ? 'https://beta.flatgirl.net' : 'https://flatgirl.net'], AllowMethods: ['POST','OPTIONS'], AllowHeaders: ['content-type'] } })
+      CorsConfiguration: { AllowCredentials: true, AllowOrigins: [env === 'beta' ? 'https://beta.flatgirl.net' : 'https://flatgirl.net'], AllowMethods: ['POST','OPTIONS'], AllowHeaders: ['content-type'] } })
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      TableName: `flat-girl-${env}-events`, BillingMode: 'PAY_PER_REQUEST', DeletionProtectionEnabled: true,
+      KeySchema: [{ AttributeName: 'event_id', KeyType: 'HASH' }],
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+      SSESpecification: { SSEEnabled: true },
+    })
+    const table: any = Object.values(template.findResources('AWS::DynamoDB::Table'))[0]
+    assert.equal(table.Properties.TimeToLiveSpecification, undefined)
+    template.hasResource('AWS::DynamoDB::Table', { DeletionPolicy: 'Retain', UpdateReplacePolicy: 'Retain' })
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      FunctionName: `flat-girl-${env}-meta-worker`, Environment: { Variables: { EVENTS_TABLE: { Ref: Object.keys(template.findResources('AWS::DynamoDB::Table'))[0] } } },
+    })
     template.resourceCountIs('AWS::IAM::Role', 0)
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 3)
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 4)
     template.hasResource('AWS::Logs::LogGroup', { DeletionPolicy: 'RetainExceptOnCreate', UpdateReplacePolicy: 'Retain' })
     assert.ok(!JSON.stringify(template.toJSON()).includes('FlatGirlBetaSite'))
   }
   const accessJson = Template.fromStack(access).toJSON()
-  const executionPolicy = (Object.entries(accessJson.Resources).find(([id, resource]: [string, any]) =>
-    id.startsWith('ExecutionDefaultPolicy') && resource.Type === 'AWS::IAM::Policy')![1] as any).Properties.PolicyDocument.Statement
+  const executionPolicy = Object.entries(accessJson.Resources).filter(([id, resource]: [string, any]) =>
+    id.startsWith('Execution') && ['AWS::IAM::Policy','AWS::IAM::ManagedPolicy'].includes(resource.Type))
+    .flatMap(([, resource]: [string, any]) => resource.Properties.PolicyDocument.Statement)
   // Required by live CloudFormation Stage and DomainName handler schemas, not just the REST verbs.
   for (const action of ['apigateway:TagResource', 'apigateway:UntagResource']) {
     assert.ok(executionPolicy.some((statement: any) => statement.Action.includes(action) &&
@@ -182,6 +195,19 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
   for (const resource of Object.values(accessJson.Resources) as any[]) {
     if (resource.Type === 'AWS::IAM::Policy' && JSON.stringify(resource.Properties.Roles ?? []).includes('Publisher'))
       assert.ok(!JSON.stringify(resource).includes('ssm:'))
+  }
+  for (const env of ['beta', 'production']) {
+    const policies = Object.entries(accessJson.Resources).filter(([id, resource]: [string, any]) =>
+      id.startsWith(`${env}MetaWorkerRuntime`) && resource.Type === 'AWS::IAM::Policy')
+      .flatMap(([, resource]: [string, any]) => resource.Properties.PolicyDocument.Statement)
+    const writes = policies.filter((statement: any) => JSON.stringify(statement.Action).includes('dynamodb:'))
+    assert.equal(writes.length, 1)
+    assert.deepEqual(writes[0].Action, ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'])
+    assert.equal(writes[0].Resource, `arn:aws:dynamodb:us-east-1:111111111111:table/flat-girl-${env}-events`)
+  }
+  for (const [id, resource] of Object.entries(accessJson.Resources) as [string, any][]) {
+    if (/Publisher|SignupRuntime|MetaEdgeRuntime/.test(id) && resource.Type === 'AWS::IAM::Policy')
+      assert.ok(!JSON.stringify(resource).includes('dynamodb:'))
   }
   app.synth() // Also exercises the 51,200-byte inline-template limit.
   assert.throws(() => signupConfig({ ...cfg, beta: { ...cfg.beta, listId: 4 } }))

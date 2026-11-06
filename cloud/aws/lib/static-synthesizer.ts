@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   StackSynthesizer, type ISynthesisSession, type FileAssetSource,
@@ -21,10 +21,14 @@ export class StaticSynthesizer extends StackSynthesizer {
 
   synthesize(session: ISynthesisSession): void {
     this.synthesizeTemplate(session)
-    const template = readFileSync(path.join(session.assembly.outdir, this.boundStack.templateFile))
-    if (template.byteLength > 51_200) {
+    const file = path.join(session.assembly.outdir, this.boundStack.templateFile)
+    // JSON formatting need not consume the inline-template budget. Preserve all values,
+    // including the exact Lambda source strings used to determine immutable versions.
+    const template = JSON.stringify(JSON.parse(readFileSync(file, 'utf8')))
+    if (Buffer.byteLength(template) > 51_200) {
       throw new Error('Template exceeds the CloudFormation inline limit; review asset publishing permissions before expanding it.')
     }
+    writeFileSync(file, template)
     this.emitArtifact(session, { cloudFormationExecutionRoleArn: this.executionRoleArn })
   }
 }

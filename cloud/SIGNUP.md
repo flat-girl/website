@@ -269,3 +269,19 @@ This cleanup is specific to the failed first deployment observed above. If beta
 signup has since deployed successfully or started receiving requests, inspect its
 current state instead of repeating this deletion procedure. These recovery writes
 remain user-run; the agent only inspected state and changed local source.
+
+
+## Milestone 4 local integration
+
+The new local code includes cookies on signup requests and enables exact-origin
+credentialed CORS. Successful Brevo create/list-write results enqueue a Meta Lead;
+there are no additional Brevo requests. Existing no-write suppression/membership
+branches remain unchanged. Queue failures do not change successful signup responses.
+The Meta worker handles remote delivery separately. These changes are not yet
+live; follow [META.md](META.md) for private credentials, test events and rollout.
+
+The November 6 event-record addition includes the validated signup email in the
+SQS envelope for durable DynamoDB storage. It stays separate from the Meta event,
+which contains only its normalized SHA-256 email hash. The worker also retains
+available IP, user agent and click ID. Signup still awaits only enqueue acceptance;
+storage and Meta delivery happen afterward. See [META.md](META.md#durable-event-records).
