@@ -26,7 +26,7 @@ function edgeEvent(extra: any = {}) {
 }
 function edgeFixture(config = cfg()) {
   const sent: any[] = []; let failures = 0, reads = 0
-  const runtime = { config: async () => { reads++; return config }, send: async (event: any) => { sent.push(event) }, failure: () => { failures++ } }
+  const runtime = { config: async () => { reads++; return config }, send: async (event: any, _signal?: AbortSignal) => { sent.push(event) }, failure: () => { failures++ } }
   return { runtime, sent, failures: () => failures, reads: () => reads,
     handler: edge.createHandler('production', { runtime, now: () => now }) }
 }
@@ -76,13 +76,11 @@ test('same/no click preserves cookie; new click replaces it; unsafe or duplicate
   const event = edgeEvent({ querystring: 'fbclid=new' }); event.Records[0].cf.request.headers.cookie = [{ value: `_fbc=${fbc}` }]
   assert.match((await edgeFixture().handler(event)).headers['set-cookie'][0].value, /\.new;/)
 })
-test('GPC suppresses the view but preserves requested immediate capture; off disables both', async () => {
+test('GPC suppresses the view but preserves immediate capture without reading settings', async () => {
   const f = edgeFixture(), event = edgeEvent(); event.Records[0].cf.request.headers['sec-gpc'] = [{ value: '1' }]
   assert.ok((await f.handler(event)).headers['set-cookie'])
   assert.equal(f.sent.length, 0)
-  const off = edgeFixture(cfg('production', { mode: 'off' }))
-  assert.equal((await off.handler(edgeEvent())).headers['set-cookie'], undefined)
-  assert.equal(off.sent.length, 0)
+  assert.equal(f.reads(), 0)
 })
 test('edge skips assets, HEAD, errors and prefetch; enqueue failure returns the page', async () => {
   for (const extra of [{ uri: '/_nuxt/app.js' }, { method: 'HEAD' }, { headers: { purpose: [{ value: 'prefetch' }] } }]) {
@@ -100,13 +98,33 @@ test('uncached beta origin response uses only beta attribution despite its S3 ho
   assert.match((await handler(event)).headers['set-cookie'][0].value, /^_fbc_beta=/)
   assert.equal(f.sent[0].event_source_url, 'https://beta.flatgirl.net/')
 })
+test('edge only enqueues, allows work beyond 500 ms and counts separate visits and 304 responses', async () => {
+  const f = edgeFixture(), originalSend = f.runtime.send
+  f.runtime.config = async () => { throw Error('Edge must not read SSM') }
+  f.runtime.send = async (event: any, signal?: AbortSignal) => {
+    await new Promise(resolve => setTimeout(resolve, 600))
+    signal!.throwIfAborted()
+    await originalSend(event)
+  }
+  const first = edgeEvent()
+  await f.handler(first)
+  const second = edgeEvent()
+  second.Records[0].cf.config.requestId = 'another-request'
+  second.Records[0].cf.response.status = '304'
+  delete (second.Records[0].cf.response.headers as any)['content-type']
+  await f.handler(second)
+  assert.equal(f.sent.length, 2)
+  assert.notEqual(f.sent[0].event_id, f.sent[1].event_id)
+  assert.equal(f.failures(), 0)
+})
 test('producer reads no Meta credentials; queue keeps archive email separate from hashed Meta payload and safe logs', async () => {
   const reads: string[] = [], messages: any[] = [], logs: any[] = []
   const runtime = meta.createRuntime('beta', { now: () => now,
     read: async (name: string) => { reads.push(name); return cfg('beta') },
     enqueue: async (item: any) => messages.push(item), log: (v: any) => logs.push(v) })
   const event = meta.buildEvent('Lead', 'beta', { email: 'private@example.com', agent: 'Browser', fbc }, now)
-  await runtime.send(event, await runtime.config(signal()), signal(), 'private@example.com')
+  await runtime.config(signal())
+  await runtime.send(event, signal(), 'private@example.com')
   assert.deepEqual(reads, ['/flat-girl/meta/beta/settings'])
   assert.deepEqual(Object.keys(messages[0]).sort(), ['email', 'environment', 'event', 'schema']); assert.equal(messages[0].event, event)
   assert.equal(messages[0].email, 'private@example.com')
@@ -151,7 +169,7 @@ test('manual regression wrapper adds a test code outside the Lambda transport an
 test('worker retries original events, refuses wrong environment and old events', async () => {
   const delivered: any[] = []
   const runtime = { config: async () => cfg('beta'), deliver: async (event: any) => delivered.push(event), failure() {} }
-  const handler = worker.createHandler('beta', runtime, () => now, async () => {})
+  const handler = worker.createHandler('beta', runtime, () => now, { ensure: async () => false, complete: async () => {} })
   const envelope = { schema: 1, environment: 'beta', event: meta.buildEvent('Lead', 'beta', { email: 'reader@example.com', agent: 'Browser' }, now) }
   const record = (item: any, id = 'one') => ({ messageId: id, body: JSON.stringify(item) })
   for (let i = 0; i < 2; i++) assert.deepEqual(await handler({ Records: [record(envelope)] }), { batchItemFailures: [] })
@@ -163,77 +181,101 @@ test('worker retries original events, refuses wrong environment and old events',
   runtime.deliver = async () => { throw Error('network') }
   assert.deepEqual(await handler({ Records: [record(envelope)] }), { batchItemFailures: [{ itemIdentifier: 'one' }] })
 })
-test('archive retains requested matching data once per ID, omits missing values and excludes credentials', async () => {
-  const records = new Map(), calls: any[] = []
-  const archive = worker.createArchive('beta', { tableName: 'flat-girl-beta-events', put: async (input: any) => {
-    calls.push(input)
-    assert.equal(input.ConditionExpression, 'attribute_not_exists(event_id)')
-    const id = input.Item.event_id.S
-    if (records.has(id)) throw Object.assign(Error('exists'), { name: 'ConditionalCheckFailedException' })
-    records.set(id, input.Item)
+function archiveFixture() {
+  const records = new Map<string, any>(), operations: string[] = [], fail = new Set<string>()
+  const archive = worker.createArchive('beta', { tableName: 'flat-girl-beta-events', request: async (operation: string, input: any) => {
+    operations.push(operation)
+    assert.equal(input.TableName, 'flat-girl-beta-events')
+    if (fail.has(operation)) throw Error('database unavailable')
+    const id = input.Key?.event_id.S || input.Item.event_id.S
+    if (operation === 'GetItem') {
+      assert.equal(input.ConsistentRead, true)
+      return records.has(id) ? { Item: structuredClone(records.get(id)) } : {}
+    }
+    if (operation === 'PutItem') {
+      assert.equal(input.ConditionExpression, 'attribute_not_exists(event_id)')
+      if (records.has(id)) throw Object.assign(Error('exists'), { name: 'ConditionalCheckFailedException', Item: records.get(id) })
+      records.set(id, structuredClone(input.Item))
+    } else if (operation === 'UpdateItem') {
+      assert.equal(input.ConditionExpression, 'attribute_exists(event_id)')
+      if (!records.has(id)) throw Error('missing row')
+      Object.assign(records.get(id), { dynamo_success: { BOOL: true }, meta_success: { BOOL: true },
+        meta_delivered_at: input.ExpressionAttributeValues[':time'] })
+    } else throw Error('unexpected operation')
+    return {}
   } })
+  return { archive, records, operations, fail }
+}
+test('archive retains requested fields once, tracks independent success and never rewrites an existing event', async () => {
+  const f = archiveFixture()
   const event = meta.buildEvent('Lead', 'beta', { email: 'Reader@example.com', agent: 'Browser', ip: '2001:db8::1', fbc }, now)
-  await archive(event, signal(), 'Reader@example.com')
-  await archive(event, signal(), 'Reader@example.com')
-  assert.equal(records.size, 1)
-  assert.deepEqual(records.get(event.event_id), {
+  assert.equal(await f.archive.ensure(event, signal(), 'Reader@example.com'), false)
+  assert.equal(await f.archive.ensure(event, signal(), 'Reader@example.com'), false)
+  assert.equal(f.records.size, 1)
+  assert.deepEqual(f.records.get(event.event_id), {
     schema_version: { N: '1' }, event_id: { S: event.event_id }, environment: { S: 'beta' },
     event_name: { S: 'Lead' }, event_time: { N: String(now / 1000) },
     action_source: { S: 'website' }, event_source_url: { S: 'https://beta.flatgirl.net/' },
     email: { S: 'Reader@example.com' }, email_sha256: { S: event.user_data.em[0] },
     client_ip_address: { S: '2001:db8::1' }, client_user_agent: { S: 'Browser' }, fbc: { S: fbc },
+    dynamo_success: { BOOL: true }, meta_success: { BOOL: false },
   })
+  await f.archive.complete(event.event_id, signal(), now)
+  assert.equal(await f.archive.ensure(event, signal()), true)
+  assert.equal(f.operations.filter(x => x === 'PutItem').length, 1)
   const view = meta.buildEvent('ViewContent', 'beta', { agent: 'Browser' }, now)
-  await archive(view, signal())
-  for (const key of ['email', 'email_sha256', 'fbc', 'client_ip_address']) assert.equal(records.get(view.event_id)[key], undefined)
-  assert.equal(calls[0].TableName, 'flat-girl-beta-events')
+  await f.archive.ensure(view, signal())
+  for (const key of ['email', 'email_sha256', 'fbc', 'client_ip_address']) assert.equal(f.records.get(view.event_id)[key], undefined)
 })
-test('worker independently archives and delivers; either failure retries without duplicating records or exposing email to Meta', async () => {
-  const stored = new Map(), sent: any[] = []
-  let failStore = false, failMeta = true, failConfig = false, paused = false
-  const archive = worker.createArchive('beta', { tableName: 'flat-girl-beta-events', put: async (input: any) => {
-    if (failStore) throw Error('storage')
-    const id = input.Item.event_id.S
-    if (stored.has(id)) throw Object.assign(Error('exists'), { name: 'ConditionalCheckFailedException' })
-    stored.set(id, input.Item)
-  } })
-  const runtime = { config: async () => { if (failConfig) throw Error('config'); return cfg('beta', paused ? { mode: 'off' } : {}) },
-    deliver: async (event: any) => { sent.push(event); if (failMeta) throw Error('meta') }, failure() {} }
-  const handler = worker.createHandler('beta', runtime, () => now, archive)
+test('worker retries only incomplete work; a completed event skips Meta even after its age limit', async () => {
+  const f = archiveFixture(), sent: any[] = [], failures: string[] = []
+  let failMeta = true, clock = now
+  const runtime = { config: async () => cfg('beta'),
+    deliver: async (event: any) => { sent.push(event); if (failMeta) throw Error('meta') }, failure: (stage: string) => failures.push(stage) }
+  const handler = worker.createHandler('beta', runtime, () => clock, f.archive)
   const envelope = { schema: 1, environment: 'beta', email: 'reader@example.com',
     event: meta.buildEvent('Lead', 'beta', { email: 'reader@example.com', agent: 'Browser' }, now) }
-  const input = (value = envelope) => ({ Records: [{ messageId: 'one', body: JSON.stringify(value) }] })
+  const input = { Records: [{ messageId: 'one', body: JSON.stringify(envelope) }] }
   const failed = { batchItemFailures: [{ itemIdentifier: 'one' }] }
-  assert.deepEqual(await handler(input()), failed)
-  assert.equal(stored.size, 1)
+  f.fail.add('PutItem')
+  assert.deepEqual(await handler(input), failed)
+  assert.equal(sent.length, 0)
+  assert.equal(failures.at(-1), 'dynamo_failed')
+  f.fail.clear()
+  assert.deepEqual(await handler(input), failed)
+  assert.equal(failures.at(-1), 'meta_failed')
+  assert.equal(f.records.get(envelope.event.event_id).meta_success.BOOL, false)
   failMeta = false
-  assert.deepEqual(await handler(input()), { batchItemFailures: [] })
-  assert.equal(stored.size, 1)
+  assert.deepEqual(await handler(input), { batchItemFailures: [] })
+  assert.equal(f.records.get(envelope.event.event_id).meta_success.BOOL, true)
   assert.deepEqual(sent[0], sent[1])
   assert.ok(!JSON.stringify(sent).includes('reader@example.com'))
-  failStore = true
-  assert.deepEqual(await handler(input()), failed)
-  assert.equal(sent.length, 3) // Storage failure still attempts Meta.
-  failStore = false; failConfig = true
-  const second = { ...envelope, event: { ...envelope.event, event_id: 'lead:second' } }
-  assert.deepEqual(await handler(input(second)), failed)
-  assert.equal(stored.size, 2) // Missing Meta configuration still archives.
-  failConfig = false; paused = true
-  const third = { ...envelope, event: { ...envelope.event, event_id: 'lead:third' } }
-  assert.deepEqual(await handler(input(third)), failed)
-  assert.equal(stored.size, 3)
-  paused = false
-  const old = { ...envelope, event: { ...envelope.event, event_id: 'lead:old', event_time: now / 1000 - 7 * 86400 } }
-  assert.deepEqual(await handler(input(old)), failed)
-  assert.equal(stored.size, 4) // Aged-out Meta events are still recoverable into our records.
-  assert.equal(sent.length, 3)
-  assert.deepEqual(await handler(input({ ...envelope, environment: 'production' })), failed)
-  assert.equal(stored.size, 4)
+  const writes = f.operations.filter(x => x !== 'GetItem').length
+  clock += 8 * 86400000
+  assert.deepEqual(await handler(input), { batchItemFailures: [] })
+  assert.equal(sent.length, 2)
+  assert.equal(f.operations.filter(x => x !== 'GetItem').length, writes)
+})
+test('failed completion checkpoint retries the same Meta ID; existing legacy rows are not assumed delivered', async () => {
+  const f = archiveFixture(), sent: any[] = [], failures: string[] = []
+  const runtime = { config: async () => cfg('beta'), deliver: async (event: any) => sent.push(event), failure: (stage: string) => failures.push(stage) }
+  const handler = worker.createHandler('beta', runtime, () => now, f.archive)
+  const event = meta.buildEvent('ViewContent', 'beta', { agent: 'Browser' }, now)
+  f.records.set(event.event_id, { event_id: { S: event.event_id } })
+  const input = { Records: [{ messageId: 'one', body: JSON.stringify({ schema: 1, environment: 'beta', event }) }] }
+  f.fail.add('UpdateItem')
+  assert.deepEqual(await handler(input), { batchItemFailures: [{ itemIdentifier: 'one' }] })
+  assert.equal(failures.at(-1), 'checkpoint_failed')
+  f.fail.clear()
+  assert.deepEqual(await handler(input), { batchItemFailures: [] })
+  assert.deepEqual(sent[0], sent[1])
+  assert.equal(f.records.get(event.event_id).meta_success.BOOL, true)
+  assert.equal(f.operations.includes('PutItem'), false)
 })
 test('signup queues Lead after successful Brevo operation, including GPC, without extra provider calls', async () => {
   const run = async (responses: any[], failQueue = false) => {
     const calls: any[] = [], events: any[] = []
-    const runtime = { config: async () => cfg(), send: async (event: any, _config: any, _signal: any, email: string) => { assert.equal(email, 'reader@example.com'); events.push(event); if (failQueue) throw Error('queue') }, failure() {} }
+    const runtime = { config: async () => cfg(), send: async (event: any, _signal: any, email: string) => { assert.equal(email, 'reader@example.com'); events.push(event); if (failQueue) throw Error('queue') }, failure() {} }
     const handler = signup.createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 4, environment: 'production' }, {
       fetch: async (url: string) => { calls.push(url); const [status, data] = responses.shift(); return { status, ok: status < 300, json: async () => data } },
       secrets: async () => ({ turnstile: 'private', brevo: 'private' }), meta: runtime, log() {},
@@ -259,7 +301,7 @@ test('signup queues Lead after successful Brevo operation, including GPC, withou
 })
 test('assembled Lambda entry files load without requiring local helper files; route adapter preserves campaigns', async () => {
   for (const file of ['edge', 'signup', 'worker'] as const) {
-    const context = vm.createContext({ exports: {}, require: (name: string) => { assert.ok(!name.startsWith('.')); return require(name) } })
+    const context = vm.createContext({ exports: {}, require: (name: string) => { assert.ok(!name.startsWith('.')); if (name === '@aws-sdk/client-sqs') return { SQSClient: class {}, SendMessageCommand: class {} }; return require(name) } })
     vm.runInContext(lambdaCode(file, 'beta'), context)
     assert.equal(typeof context.exports.handler, 'function'); assert.equal(typeof context.exports.createHandler, 'function')
   }

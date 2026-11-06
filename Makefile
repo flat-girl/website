@@ -107,7 +107,7 @@ meta-secrets:
 	$(no_dry_run)$(PYTHON) tools/meta.py secrets $(profile) $(site_env)
 
 meta-config:
-	$(PYTHON) tools/meta.py configure $(profile) $(site_env) $(if $(strip $(MODE)),--mode $(call quote,$(MODE))) $(if $(strip $(GRAPH_VERSION)),--version $(call quote,$(GRAPH_VERSION))) $(if $(filter false,$(VIEW_ENABLED)),--no-view) $(if $(filter false,$(LEAD_ENABLED)),--no-lead) $(if $(filter false,$(CAPTURE_ENABLED)),--no-capture) $(dry_run)
+	$(PYTHON) tools/meta.py configure $(profile) $(site_env) $(if $(strip $(MODE)),--mode $(call quote,$(MODE))) $(if $(strip $(GRAPH_VERSION)),--version $(call quote,$(GRAPH_VERSION))) $(if $(filter false,$(VIEW_ENABLED)),--no-view) $(if $(filter false,$(LEAD_ENABLED)),--no-lead) $(dry_run)
 
 meta-status:
 	$(PYTHON) tools/meta.py status $(profile) $(site_env)

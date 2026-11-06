@@ -8,7 +8,7 @@ const parameterNames = env => {
 function settings(value, env) {
   if (!value || !['off', 'live'].includes(value.mode) ||
       !/^v\d{1,3}\.0$/.test(value.version) ||
-      ['viewEnabled', 'leadEnabled', 'captureEnabled'].some(k => typeof value[k] !== 'boolean'))
+      ['viewEnabled', 'leadEnabled'].some(k => typeof value[k] !== 'boolean'))
     throw new Error('configuration')
   return value
 }
@@ -82,6 +82,13 @@ function createRuntime(env, deps = {}) {
     const result = await client.send(new Command({ Name, WithDecryption: true }), { abortSignal: signal })
     return JSON.parse(result.Parameter.Value)
   })
+  const initializeQueue = () => {
+    if (!sqs) {
+      const sdk = require('@aws-sdk/client-sqs')
+      sqs = new sdk.SQSClient({ region: 'us-east-1', maxAttempts: 1 }); SendMessage = sdk.SendMessageCommand
+    }
+  }
+  if (deps.initializeQueue && !deps.enqueue) initializeQueue()
   const log = outcome => (deps.log || (value => console.info(JSON.stringify(value))))({ component: 'meta', environment: env, outcome })
   return {
     async config(signal) {
@@ -99,24 +106,25 @@ function createRuntime(env, deps = {}) {
       await deliver(event, config, credentials, signal, deps.fetch || fetch)
       log(event.event_name === 'Lead' ? 'lead_delivered' : 'view_delivered')
     },
-    async send(event, config, signal, email) {
-      if (config.mode === 'off' || !(event.event_name === 'Lead' ? config.leadEnabled : config.viewEnabled)) return
+    async send(event, signal, email) {
       const envelope = { schema: 1, environment: env, event }
       // First-party archive only. The Meta request contains event, never this envelope.
       if (event.event_name === 'Lead' && typeof email === 'string') envelope.email = email
       if (deps.enqueue) await deps.enqueue(envelope, signal)
       else {
         if (!deps.queueUrl) throw new Error('queue')
-        if (!sqs) {
-          const sdk = require('@aws-sdk/client-sqs')
-          sqs = new sdk.SQSClient({ region: 'us-east-1', maxAttempts: 1 }); SendMessage = sdk.SendMessageCommand
-        }
+        initializeQueue()
         const result = await sqs.send(new SendMessage({ QueueUrl: deps.queueUrl, MessageBody: JSON.stringify(envelope) }), { abortSignal: signal })
         if (!result.MessageId) throw new Error('queue')
       }
       log(event.event_name === 'Lead' ? 'lead_queued' : 'view_queued')
     },
-    failure() { log('delivery_failed') },
+    progress(outcome) {
+      if (['dynamo_succeeded', 'already_completed', 'meta_checkpointed', 'view_gpc_skipped'].includes(outcome)) log(outcome)
+    },
+    failure(outcome) {
+      log(['dynamo_failed', 'meta_failed', 'checkpoint_failed', 'edge_enqueue_failed', 'edge_payload_failed', 'edge_budget_exhausted'].includes(outcome) ? outcome : 'delivery_failed')
+    },
   }
 }
 exports.cookieName = cookieName

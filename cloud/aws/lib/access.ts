@@ -72,7 +72,6 @@ export class Access extends Base {
       runtime.addToPolicy(statement(['ssm:GetParameter'],[...parameters,meta[0]]))
       const edgeRole=new iam.Role(this,`${env}MetaEdgeRuntime`,{roleName:edgeName(env),
         assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
-      edgeRole.addToPolicy(statement(['ssm:GetParameter'],[meta[0]]))
       const queueArn=`arn:aws:sqs:${p.region}:${p.account}:${metaQueueName(env)}`
       for(const producer of [runtime,edgeRole]) producer.addToPolicy(statement(['sqs:SendMessage'],[queueArn]))
       const workerName=metaWorkerName(env),workerArn=`arn:aws:lambda:${p.region}:${p.account}:function:${workerName}`
@@ -81,7 +80,7 @@ export class Access extends Base {
       workerRole.addToPolicy(statement(['ssm:GetParameter'],meta))
       workerRole.addToPolicy(statement(['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'],[queueArn]))
       const eventsArn=`arn:aws:dynamodb:${p.region}:${p.account}:table/${eventTableName(env)}`
-      workerRole.addToPolicy(statement(['dynamodb:PutItem'],[eventsArn]))
+      workerRole.addToPolicy(statement(['dynamodb:GetItem','dynamodb:PutItem','dynamodb:UpdateItem'],[eventsArn]))
       operator.addToPolicy(statement(['dynamodb:DescribeTable','dynamodb:DescribeContinuousBackups','dynamodb:GetItem','dynamodb:Scan'],[eventsArn]))
       execution.addToPolicy(statement(['dynamodb:CreateTable','dynamodb:DeleteTable','dynamodb:DescribeTable','dynamodb:UpdateTable',
         'dynamodb:DescribeContinuousBackups','dynamodb:UpdateContinuousBackups',

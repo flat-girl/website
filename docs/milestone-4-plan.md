@@ -126,11 +126,11 @@ Freeze the payload first: any delivery retry keeps the same ID and timestamp.
 Separate signup submissions can produce separate Leads; there is no uniqueness
 check across requests.
 
-Edge and signup await only SQS acceptance: 500 ms total for edge config/enqueue,
+Edge and signup await only SQS acceptance: 3 seconds for the edge SQS enqueue,
 up to 1.5 seconds for signup config/enqueue, with Lambda response time reserved.
 Queue failure must not turn an otherwise successful page/signup into an error.
 No background promises after returning. Only the worker can read the Meta token;
-producers read nonsecret settings and send to their environment's queue.
+signup reads nonsecret settings; edge only sends to its environment's queue.
 
 Queue messages contain the prepared Meta event (email already hashed), original
 ID/time and environment. Lead envelopes separately include the validated unhashed
@@ -152,11 +152,14 @@ zero latency or exactly-once delivery. Brevo stays synchronous and unchanged.
 
 ### Durable records — November 6 addition
 
-The same worker independently inserts an event record into its environment's
+The worker first stores/checks an event record in its environment's
 `flat-girl-{environment}-events` DynamoDB table and sends the event to Meta.
 Acknowledge SQS only after both succeed. Use a conditional insert on `event_id`
 so retries keep one original record; Meta retries keep the same ID/time too.
-Archival still runs if Meta or its settings are unavailable. An event that never
+Archival runs before Meta settings/delivery. Retries read `meta_success` and skip
+completed Meta sends; a new row has `dynamo_success=true`, `meta_success=false`.
+Meta acknowledgment is persisted before SQS acknowledgment. A lost response or
+failed completion update can still cause a same-ID resend. An event that never
 reaches SQS is not recoverable through this worker.
 
 Retain event name/ID/time, environment, canonical URL/action source, and available
@@ -165,7 +168,7 @@ click ID. Never log these values or store credentials. Missing matching values
 stay absent. GPC and existing eligibility checks remain upstream of both sinks.
 
 Use an encrypted on-demand table per environment, PITR, deletion protection and
-retention on stack deletion/replacement. No TTL. Only the worker gets `PutItem`;
+retention on stack deletion/replacement. No TTL. Only the worker gets `GetItem`/`PutItem`/`UpdateItem`;
 operator read access supports inspection and a future private export. No UI,
 DuckDB integration, indexes or export jobs in this change. Counts represent
 eligible events, not unique visitors or confirmed Meta attribution.
@@ -367,3 +370,18 @@ This validates direct CAPI acceptance. It does not establish deployed edge/cooki
 SQS, DynamoDB, GPC or signup integration behavior. Next: review/deploy beta signup
 resources and edge changes, then verify both event types through the full pipeline
 using section 3 of [the runbook](../cloud/META.md).
+
+
+### Production investigation and local fixes — November 6, 2026
+
+The user deployed production and observed DynamoDB records. Read-only worker logs
+confirmed Meta accepted ViewContent and Lead. A later phone Lead had no matching
+mobile ViewContent; regional edge logs showed nine enqueue-path failures. The
+500 ms cold-start/config/enqueue budget was too aggressive. The local update removes
+SSM reads from the edge, initializes its SQS client at startup, uses 512 MB memory,
+allows a 3-second enqueue deadline, and counts eligible `304` page revalidations.
+It also persists independent Dynamo/Meta completion flags so SQS retries skip
+completed work. Configuration gates now live in signup/worker; the edge always
+captures attribution and queues eligible non-GPC views. No visitor/email-level
+ViewContent suppression is introduced. These changes still require the explicit
+IAM, signup-stack and site-stack deployments in runbook section 5.

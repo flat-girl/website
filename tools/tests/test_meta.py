@@ -48,12 +48,12 @@ class MetaTests(unittest.TestCase):
             self.assertEqual(value['mode'], mode)
             self.assertEqual(value['version'], 'v26.0')
             self.assertNotIn('testEventCode', value)
-            for key in ['viewEnabled', 'leadEnabled', 'captureEnabled']: self.assertTrue(value[key])
+            for key in ['viewEnabled', 'leadEnabled']: self.assertTrue(value[key])
 
     def test_config_dry_run_never_writes_and_disable_preserves_version(self):
         aws = FakeAWS()
         with contextlib.redirect_stdout(io.StringIO()) as output:
-            meta.configure(aws, 'beta', 'live', 'v25.0', True, True, True, True)
+            meta.configure(aws, 'beta', 'live', 'v25.0', True, True, True)
             self.assertEqual(aws.writes, [])
             meta.configure(aws, 'beta', 'off', None)
         settings = json.loads(aws.writes[0][1]['Value'])

@@ -21,7 +21,7 @@ def names(env):
 def validate(value, env):
     if (not isinstance(value, dict) or value.get('mode') not in ['off', 'live'] or
         not re.fullmatch(r'v\d{1,3}\.0', value.get('version', '')) or
-        any(type(value.get(key)) is not bool for key in ['viewEnabled', 'leadEnabled', 'captureEnabled'])):
+        any(type(value.get(key)) is not bool for key in ['viewEnabled', 'leadEnabled'])):
         raise ValueError('Invalid Meta settings')
     return value
 
@@ -53,14 +53,14 @@ def set_secrets(aws, env):
              Value=json.dumps(dict(datasetId=dataset, accessToken=token)))
     print(f'{env}: private credentials stored. Other environment unchanged.')
 
-def configure(aws, env, mode=None, version=None, view=True, lead=True, capture=True, dry_run=False):
+def configure(aws, env, mode=None, version=None, view=True, lead=True, dry_run=False):
     mode = mode or 'live'
     if mode == 'off' and not version:
         value = read(aws, env, 'settings')
         value['mode'] = 'off'
     else:
         value = dict(mode=mode, version=version or GRAPH_VERSION,
-                     viewEnabled=view, leadEnabled=lead, captureEnabled=capture)
+                     viewEnabled=view, leadEnabled=lead)
     validate(value, env)
     if mode != 'off':
         creds = read(aws, env, 'credentials')
@@ -104,17 +104,16 @@ def main():
     parser.add_argument('--version')
     parser.add_argument('--view', action=argparse.BooleanOptionalAction)
     parser.add_argument('--lead', action=argparse.BooleanOptionalAction)
-    parser.add_argument('--capture', action=argparse.BooleanOptionalAction)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--event', choices=['ViewContent', 'Lead'], default='ViewContent')
     args = parser.parse_args()
-    if args.command != 'configure' and (args.mode or args.version or args.view is not None or args.lead is not None or args.capture is not None or args.dry_run):
+    if args.command != 'configure' and (args.mode or args.version or args.view is not None or args.lead is not None or args.dry_run):
         parser.error('Mode/version/feature flags apply only to configure')
     aws = AWS(args.profile, project(), read_only=args.command in ['status', 'test'] or args.dry_run)
     if args.command == 'secrets': return set_secrets(aws, args.env)
     if args.command == 'configure': return configure(aws, args.env, args.mode, args.version,
         True if args.view is None else args.view, True if args.lead is None else args.lead,
-        True if args.capture is None else args.capture, args.dry_run)
+        args.dry_run)
     if args.command == 'test': return test_event(aws, args.env, args.event)
     print(json.dumps(validate(read(aws, args.env, 'settings'), args.env), sort_keys=True))
     out = aws.outputs('signup-'+args.env)

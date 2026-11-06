@@ -109,7 +109,7 @@ function createHandler(settings, dependencies) {
               email: input.email, ip: event.requestContext?.http?.sourceIp, agent: headers['user-agent'],
               fbc: metaApi.readCookie(event.cookies || (headers.cookie ? [headers.cookie] : []), metaApi.cookieName(settings.environment)),
             })
-            await dependencies.meta.send(payload, config, trackingSignal, input.email)
+            await dependencies.meta.send(payload, trackingSignal, input.email)
           }
         } catch { dependencies.meta.failure() }
       }

@@ -61,16 +61,16 @@ export class Site extends Base {
     if(kvs) kvs.applyRemovalPolicy(RemovalPolicy.RETAIN)
     const routes=beta?new cf.Function(this,'Routes',{functionName:`flat-girl-${env}-routes`,runtime:cf.FunctionRuntime.JS_2_0,
       code:cf.FunctionCode.fromInline(routeCode(host,beta)),keyValueStore:kvs}):undefined
-    const edgeVersion=(id:string,name:string,code:string)=>{
+    const edgeVersion=(id:string,name:string,code:string,memorySize=128)=>{
       const fn=new lambda.CfnFunction(this,id,{functionName:name,runtime:"nodejs24.x",architectures:["x86_64"],
-        handler:"index.handler",code:{zipFile:code},memorySize:128,timeout:5,
+        handler:"index.handler",code:{zipFile:code},memorySize,timeout:5,
         role:`arn:aws:iam::${p.account}:role/${edgeName(env)}`})
       fn.applyRemovalPolicy(RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE)
-      const version=new lambda.CfnVersion(this,`${id}Version${codeHash(code)}`,{functionName:fn.ref})
+      const version=new lambda.CfnVersion(this,`${id}Version${codeHash(code + memorySize)}`,{functionName:fn.ref})
       version.applyRemovalPolicy(RemovalPolicy.RETAIN)
       return lambda.Version.fromVersionArn(this,`${id}Published`,`${fn.attrArn}:${version.attrVersion}`)
     }
-    const tracking=edgeVersion("MetaEdge",edgeName(env),lambdaCode("edge",env,`https://sqs.us-east-1.amazonaws.com/${p.account}/${metaQueueName(env)}`))
+    const tracking=edgeVersion("MetaEdge",edgeName(env),lambdaCode("edge",env,`https://sqs.us-east-1.amazonaws.com/${p.account}/${metaQueueName(env)}`),512)
     const routing=beta?undefined:edgeVersion("EdgeRoutes","flat-girl-production-edge-routes",edgeRouteCode())
     const forwarding=beta?new cf.OriginRequestPolicy(this,"MetaForwarding",{
       cookieBehavior:cf.OriginRequestCookieBehavior.allowList("_fbc_beta"),

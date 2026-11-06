@@ -202,7 +202,7 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
       .flatMap(([, resource]: [string, any]) => resource.Properties.PolicyDocument.Statement)
     const writes = policies.filter((statement: any) => JSON.stringify(statement.Action).includes('dynamodb:'))
     assert.equal(writes.length, 1)
-    assert.equal(writes[0].Action, 'dynamodb:PutItem')
+    assert.deepEqual(writes[0].Action, ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'])
     assert.equal(writes[0].Resource, `arn:aws:dynamodb:us-east-1:111111111111:table/flat-girl-${env}-events`)
   }
   for (const [id, resource] of Object.entries(accessJson.Resources) as [string, any][]) {
