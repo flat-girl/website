@@ -3,7 +3,7 @@ import type { Construct } from 'constructs'
 import { RemovalPolicy } from 'aws-cdk-lib'
 import { Base } from './stacks.js'
 import { bucketName, roleArn, stacks, type Config } from './config.js'
-import { metaParameters, edgeName, metaQueueName, metaWorkerName, eventTableName } from './meta.js'
+import { metaParameters, edgeName, metaQueueName, metaWorkerName, eventTableName, edgeRouteName, betaAuthParameter } from './meta.js'
 import { signupNames, signupParameters } from './signup-config.js'
 
 export class Access extends Base {
@@ -27,7 +27,7 @@ export class Access extends Base {
     operator.addToPolicy(statement(['cloudformation:*'],stackArns))
     operator.addToPolicy(statement(['iam:PassRole'],[execution.roleArn],{StringEquals:{'iam:PassedToService':'cloudformation.amazonaws.com'}}))
     operator.addToPolicy(statement(['cloudfront:DescribeKeyValueStore'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
-    operator.addToPolicy(statement(['cloudfront-keyvaluestore:DescribeKeyValueStore','cloudfront-keyvaluestore:PutKey'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
+    operator.addToPolicy(statement(['cloudfront-keyvaluestore:DescribeKeyValueStore','cloudfront-keyvaluestore:GetKey','cloudfront-keyvaluestore:PutKey'],[`arn:aws:cloudfront::${p.account}:key-value-store/*`]))
     const buckets=['sources','variants','beta','production'].map(kind=>`arn:aws:s3:::${bucketName(p,kind)}`)
     execution.addToPolicy(statement(['s3:*'],buckets.flatMap(arn=>[arn,`${arn}/*`])))
     execution.addToPolicy(statement(['route53:GetHostedZone','route53:ListResourceRecordSets'],[`arn:aws:route53:::hostedzone/${p.hostedZoneId}`]))
@@ -100,7 +100,18 @@ export class Access extends Base {
       operator.addToPolicy(statement(['sqs:GetQueueAttributes','sqs:GetQueueUrl'],[queueArn,`${queueArn}-dlq`]))
       operator.addToPolicy(statement(['lambda:GetFunctionConfiguration'],[workerArn]))
       operator.addToPolicy(statement(['logs:FilterLogEvents'],[`${workerLogs}:*`]))
-      const edgeNames=[edgeName(env),...(env==='production'?['flat-girl-production-edge-routes']:[])]
+      const routerRole=new iam.Role(this,`${env}EdgeRoutesRuntime`,{roleName:edgeRouteName(env),
+        assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
+      if(env==='beta') {
+        const authArn=`arn:aws:ssm:${p.region}:${p.account}:parameter${betaAuthParameter}`
+        routerRole.addToPolicy(statement(['ssm:GetParameter'],[authArn]))
+        operator.addToPolicy(statement(['ssm:GetParameter','ssm:PutParameter'],[authArn]))
+      }
+      const routerLogs=[`arn:aws:logs:*:${p.account}:log-group:/aws/lambda/us-east-1.${edgeRouteName(env)}:*`,
+        `arn:aws:logs:us-east-1:${p.account}:log-group:/aws/lambda/${edgeRouteName(env)}:*`]
+      routerRole.addToPolicy(statement(['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents'],routerLogs))
+      execution.addToPolicy(statement(['iam:PassRole'],[routerRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
+      const edgeNames=[edgeName(env),edgeRouteName(env)]
       const edgeArns=edgeNames.map(name=>`arn:aws:lambda:us-east-1:${p.account}:function:${name}`)
       const edgeLogs=edgeNames.flatMap(name=>[`arn:aws:logs:*:${p.account}:log-group:/aws/lambda/us-east-1.${name}:*`,
         `arn:aws:logs:us-east-1:${p.account}:log-group:/aws/lambda/${name}:*`])

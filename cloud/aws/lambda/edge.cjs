@@ -7,7 +7,7 @@ function createHandler(env, deps) {
         !['200', '304'].includes(response.status) ||
         (response.status === '200' && !/^text\/html(?:;|$)/i.test(header(response, 'content-type') || '')) ||
         /prefetch/i.test([header(request, 'purpose'), header(request, 'sec-purpose')].join(' '))) return response
-    if (env === 'production' && header(request, 'host') !== 'flatgirl.net') return response
+    if (header(request, 'host') !== (env === 'beta' ? 'beta.flatgirl.net' : 'flatgirl.net')) return response
     const budget = Math.min(3000, (context?.getRemainingTimeInMillis?.() ?? 5000) - 1000)
     if (budget <= 0) { deps.runtime.failure('edge_budget_exhausted'); return response }
     const signal = AbortSignal.timeout(budget)

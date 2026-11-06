@@ -242,7 +242,7 @@ def verify(aws,env,directory):
         if status!=200 or sha256(data)!=entry['sha256'] or headers.get_content_type()!=entry['contentType'].split(';')[0]:
             raise ValueError(f'Public bytes/type differ: {path}')
         cache=headers.get('Cache-Control','')
-        if env=='beta' and cache!='no-store' or env=='production' and cache!=entry['cacheControl']:raise ValueError(f'Cache policy differs: {path}')
+        if cache!=entry['cacheControl']:raise ValueError(f'Cache policy differs: {path}')
         if manifest['noindex'] and 'noindex' not in headers.get('X-Robots-Tag',''):raise ValueError(f'Missing noindex header: {path}')
     for key,obj in manifest['images']['objects'].items():
         status,headers,data=request(manifest['imageOrigin']+'/'+key)

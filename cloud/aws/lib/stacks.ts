@@ -7,10 +7,9 @@ import * as dns from 'aws-cdk-lib/aws-route53'
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
-import { edgeName, metaQueueName, lambdaCode, edgeRouteCode, codeHash } from './meta.js'
+import { edgeName, metaQueueName, lambdaCode, edgeRouteCode, edgeRouteName, betaAuthParameter, codeHash } from './meta.js'
 import type { Construct } from 'constructs'
 import { bucketName, roleArn, stacks, type Config } from './config.js'
-import { routeCode } from './routes.js'
 import { StaticSynthesizer } from './static-synthesizer.js'
 
 export class Base extends Stack {
@@ -59,43 +58,35 @@ export class Site extends Base {
     Tags.of(this).add('Environment',env)
     const kvs=beta?new cf.KeyValueStore(this,'Auth',{keyValueStoreName:'flat-girl-beta-auth'}):undefined
     if(kvs) kvs.applyRemovalPolicy(RemovalPolicy.RETAIN)
-    const routes=beta?new cf.Function(this,'Routes',{functionName:`flat-girl-${env}-routes`,runtime:cf.FunctionRuntime.JS_2_0,
-      code:cf.FunctionCode.fromInline(routeCode(host,beta)),keyValueStore:kvs}):undefined
-    const edgeVersion=(id:string,name:string,code:string,memorySize=128)=>{
+    const edgeVersion=(id:string,name:string,code:string,memorySize=128,roleName=edgeName(env))=>{
       const fn=new lambda.CfnFunction(this,id,{functionName:name,runtime:"nodejs24.x",architectures:["x86_64"],
         handler:"index.handler",code:{zipFile:code},memorySize,timeout:5,
-        role:`arn:aws:iam::${p.account}:role/${edgeName(env)}`})
+        role:`arn:aws:iam::${p.account}:role/${roleName}`})
       fn.applyRemovalPolicy(RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE)
-      const version=new lambda.CfnVersion(this,`${id}Version${codeHash(code + memorySize)}`,{functionName:fn.ref})
+      // Keep the deployed code-only identity for the original 128 MB functions.
+      // Renaming an unchanged version makes CloudFormation republish it, which Lambda rejects.
+      const versionKey=codeHash(memorySize===128?code:code+memorySize)
+      const version=new lambda.CfnVersion(this,`${id}Version${versionKey}`,{functionName:fn.ref})
       version.applyRemovalPolicy(RemovalPolicy.RETAIN)
       return lambda.Version.fromVersionArn(this,`${id}Published`,`${fn.attrArn}:${version.attrVersion}`)
     }
     const tracking=edgeVersion("MetaEdge",edgeName(env),lambdaCode("edge",env,`https://sqs.us-east-1.amazonaws.com/${p.account}/${metaQueueName(env)}`),512)
-    const routing=beta?undefined:edgeVersion("EdgeRoutes","flat-girl-production-edge-routes",edgeRouteCode())
-    const forwarding=beta?new cf.OriginRequestPolicy(this,"MetaForwarding",{
-      cookieBehavior:cf.OriginRequestCookieBehavior.allowList("_fbc_beta"),
-      headerBehavior:cf.OriginRequestHeaderBehavior.allowList("Sec-GPC","User-Agent","Purpose","Sec-Purpose"),
-      // Lambda@Edge origin events require all query strings for query access. Beta is uncached.
-      queryStringBehavior:cf.OriginRequestQueryStringBehavior.all(),
-    }):undefined
+    const routing=edgeVersion("EdgeRoutes",edgeRouteName(env),edgeRouteCode(env),512,edgeRouteName(env))
     const custom: cf.ResponseHeadersPolicyProps['customHeadersBehavior']={customHeaders:[]}
     if(beta || p.productionNoindex) custom.customHeaders.push({header:'X-Robots-Tag',value:'noindex, nofollow, noarchive',override:true})
-    if(beta) custom.customHeaders.push({header:'Cache-Control',value:'no-store',override:true})
     const headers=new cf.ResponseHeadersPolicy(this,'Headers',{customHeadersBehavior:custom.customHeaders.length?custom:undefined,
       securityHeadersBehavior:{contentTypeOptions:{override:true},frameOptions:{frameOption:cf.HeadersFrameOption.DENY,override:true},
         referrerPolicy:{referrerPolicy:cf.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,override:true},
         strictTransportSecurity:{accessControlMaxAge:Duration.days(365),override:true}}})
-    const cache=beta?cf.CachePolicy.CACHING_DISABLED:new cf.CachePolicy(this,'Cache',{minTtl:Duration.seconds(0),defaultTtl:Duration.seconds(60),maxTtl:Duration.days(365),
+    const cache=new cf.CachePolicy(this,'Cache',{minTtl:Duration.seconds(0),defaultTtl:Duration.seconds(60),maxTtl:Duration.days(365),
       enableAcceptEncodingBrotli:true,enableAcceptEncodingGzip:true})
     const domains=beta?[host]:[host,`www.${host}`]
     const distribution=new cf.Distribution(this,'Distribution',{comment:`Flat Girl ${env}`,enabled:beta?p.betaEnabled:true,
       domainNames:domains,certificate,defaultRootObject:'index.html',minimumProtocolVersion:cf.SecurityPolicyProtocol.TLS_V1_2_2021,
       defaultBehavior:{origin:S3BucketOrigin.withOriginAccessControl(bucket),viewerProtocolPolicy:cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods:cf.AllowedMethods.ALLOW_GET_HEAD,compress:true,cachePolicy:cache,responseHeadersPolicy:headers,
-        originRequestPolicy:forwarding,
-        functionAssociations:routes?[{eventType:cf.FunctionEventType.VIEWER_REQUEST,function:routes}]:undefined,
-        edgeLambdas:[{eventType:beta?cf.LambdaEdgeEventType.ORIGIN_RESPONSE:cf.LambdaEdgeEventType.VIEWER_RESPONSE,functionVersion:tracking},
-          ...(routing?[{eventType:cf.LambdaEdgeEventType.VIEWER_REQUEST,functionVersion:routing}]:[])]},
+        edgeLambdas:[{eventType:cf.LambdaEdgeEventType.VIEWER_RESPONSE,functionVersion:tracking},
+          {eventType:cf.LambdaEdgeEventType.VIEWER_REQUEST,functionVersion:routing}]},
       errorResponses:[403,404].map(httpStatus=>({httpStatus,ttl:Duration.seconds(0)}))})
     const zone=this.zone()
     domains.forEach((name,i)=>{const props={zone,recordName:name,target:dns.RecordTarget.fromAlias(new CloudFrontTarget(distribution))};
@@ -103,6 +94,6 @@ export class Site extends Base {
     this.output('SiteUrl',`https://${host}`);this.output('BucketName',bucket.bucketName)
     this.output('DistributionId',distribution.distributionId);this.output('DistributionDomainName',distribution.distributionDomainName)
     this.output('MetaEdgeVersionArn',tracking.functionArn)
-    if(kvs) this.output('AuthStoreArn',kvs.keyValueStoreArn)
+    if(kvs) { this.output('AuthStoreArn',kvs.keyValueStoreArn); this.output('AuthParameterName',betaAuthParameter) }
   }
 }

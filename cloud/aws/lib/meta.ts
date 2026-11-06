@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { routeCode } from './routes.js'
 export type MetaEnvironment = 'beta' | 'production'
 export const metaParameters = (env: MetaEnvironment) => ({
   settings: `/flat-girl/meta/${env}/settings`, credentials: `/flat-girl/meta/${env}/credentials`,
@@ -15,24 +14,10 @@ export function lambdaCode(file: 'signup' | 'edge' | 'worker', env: MetaEnvironm
   return `const __environment = ${JSON.stringify(env)}; const __queueUrl = ${JSON.stringify(queueUrl)};\nconst __meta = (() => { const exports = {};\n${helper}\nreturn exports; })();\n${source}`
 }
 export const codeHash = (code: string) => createHash('sha256').update(code).digest('hex').slice(0, 16)
-// Execute the existing routing logic using an adapter for Lambda@Edge's event format.
-export function edgeRouteCode(): string {
-  return `${routeCode('flatgirl.net')}\nexports.handler = async event => {
-    const original = event.Records[0].cf.request;
-    const querystring = Object.create(null);
-    // Keep encoded campaign query bytes exactly as the CloudFront Function does.
-    for (const pair of (original.querystring || '').split('&').filter(Boolean)) {
-      const split = pair.indexOf('='), key = split < 0 ? pair : pair.slice(0, split);
-      const item = {value: split < 0 ? '' : pair.slice(split + 1)};
-      if (querystring[key]) {
-        const entry = querystring[key]; entry.multiValue = [...(entry.multiValue || [{value:entry.value}]), item];
-      } else Object.defineProperty(querystring, key, {value:item, enumerable:true, writable:true});
-    }
-    const request = {uri:original.uri, querystring,
-      headers:Object.fromEntries(Object.entries(original.headers).map(([key, value]) => [key, {value:value[0].value}]))};
-    const result = await handler({request});
-    if (!result.statusCode) return original;
-    return {status:String(result.statusCode), headers:Object.fromEntries(Object.entries(result.headers)
-      .map(([key, entry]) => [key, [{key, value:entry.value}]]))};
-  };`
+// Both environments run the same router; only the environment configuration differs.
+export const edgeRouteName = (env: MetaEnvironment) => `flat-girl-${env}-edge-routes`
+export const betaAuthParameter = '/flat-girl/beta/authorization-sha256'
+export function edgeRouteCode(env: MetaEnvironment = 'production'): string {
+  const source = readFileSync(new URL('../lambda/edge-router.cjs', import.meta.url), 'utf8')
+  return `const __environment = ${JSON.stringify(env)};\n${source}`
 }

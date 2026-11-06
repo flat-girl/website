@@ -160,3 +160,10 @@ lifecycle, tagging and PITR permissions. Apply the access update before the sign
 stacks. These tables and SQS/DLQ messages contain the requested customer identifiers;
 logs continue to exclude them. Retention/deletion protection keeps records through
 stack removal; no automatic expiry is configured.
+
+
+The shared-router revision adds dedicated `flat-girl-{environment}-edge-routes`
+roles. Beta's router alone reads `/flat-girl/beta/authorization-sha256`; production
+has no auth-read permission. The operator can copy the existing KVS digest into
+that SecureString using `beta-auth-migrate` and rotate both stores using `beta-auth`.
+Tracking roles keep queue-only access. Apply access before migration and site updates.

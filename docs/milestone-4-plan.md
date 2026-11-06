@@ -32,7 +32,7 @@ identifiers. No session store, cross-request signup deduplication or tracking fr
 
 | Area | Change |
 | --- | --- |
-| `cloud/aws/lib/stacks.ts`, `routes.ts` | Production Lambda@Edge routing and attribution/ViewContent enqueue; beta uses uncached origin response |
+| `cloud/aws/lib/stacks.ts`, `lambda/edge-router.cjs` | Shared Lambda@Edge viewer routing and viewer-response tracking in beta and production |
 | `cloud/aws/lambda/signup.cjs` | Send Lead after the existing successful Brevo registration operation |
 | New small `cloud/aws/lambda/meta.cjs` helper | Build payloads, hash email and enqueue; worker POSTs directly to Meta |
 | `cloud/aws/lib/signup-stack.ts`, `access.ts` | Credentialed CORS, SQS/worker/DynamoDB resources, scoped access and edge versions/trust |
@@ -46,15 +46,16 @@ hits. This replaces the original CloudFront-Function-only implementation detail.
 [AWS function restrictions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-function-restrictions.html),
 [association restrictions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-function-restrictions-all.html).
 
-Keep beta's current CloudFront Function, Basic Auth and noindex. Its cache is
-already disabled, so use an origin-response Lambda for beta tracking; AWS permits
-that combination. Forward only the required attribution/query/GPC/User-Agent
-fields to that handler. Production uses viewer response so cache hits still count.
+Both environments use the same viewer-request router, viewer-response tracker,
+runtime and cache settings. Beta enables Basic Auth in the common router using
+an SSM-stored digest; production skips auth. Migrate the existing KVS digest before
+switching beta so the password is preserved. No beta-only origin-response tracker
+or forwarding policy remains. The retained KVS supports rollback only.
 
 Lambda@Edge uses a published numbered version in `us-east-1`, x86_64, a supported
 runtime, and a role trusted by Lambda and Lambda@Edge. It does not support custom
 environment variables: embed only nonsecret configuration paths and queue URL,
-then load settings from SSM. The worker alone loads Meta credentials. Reuse inline source assembly and the current 51,200-byte template check;
+with only beta's router loading auth from SSM; the tracker only enqueues. The worker alone loads Meta credentials. Reuse inline source assembly and the current 51,200-byte template check;
 do not introduce asset publishing or CDK bootstrap implicitly.
 [AWS Lambda@Edge restrictions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-edge-function-restrictions.html).
 
@@ -392,3 +393,24 @@ synthesis, 26 Python tests and runbook command syntax passed locally. Tests cove
 SSM-free edge enqueue beyond the old deadline, response-time reserve, 304/repeated
 visits, durable delivery flags, checkpoint failure and completed-message redelivery.
 Only read-only production diagnostics were run; no fixes have been deployed by the agent.
+
+
+### Shared beta/production edge architecture — November 6, 2026
+
+The user requested matching architecture and code, not only equivalent behavior.
+Both environments now share `edge-router.cjs` at viewer request and `edge.cjs` at
+viewer response, identical cache settings, memory and timeouts. Differences are
+configuration: hosts, destination resources, cookies, indexing and beta auth.
+The old CloudFront Function source and beta-only origin policy are removed.
+A private KVS-to-SSM digest migration preserves the beta password; beta auth runs
+before cache lookup, fails closed, and strips Authorization. Production skips
+all auth reads. Dedicated router roles keep SSM away from tracking handlers.
+The existing inline JSON templates are compacted without changing their values.
+The source/migration changes are local until runbook section 6 is executed.
+
+Validation of the shared architecture: 36 infrastructure tests, TypeScript and
+seven-stack synthesis passed; 29 Python tests passed. Assertions compare handler
+source, triggers, memory and cache policy across environments. Auth tests cover
+all-path enforcement, expiry/failure behavior, unchanged-password migration and
+safe credential rotation. Runbook commands passed syntax/dry-run expansion checks.
+No parity deployment or credential migration has been executed by the agent.

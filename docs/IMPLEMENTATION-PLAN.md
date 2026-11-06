@@ -6,7 +6,9 @@ delivery and preserved unsubscribe status. Milestone 4 is implemented and checke
 locally; the user confirmed Meta accepted the manual regression events November 6.
 Beta and production are deployed; DynamoDB records and Meta acceptance are confirmed.
 Production edge failures exposed a short enqueue deadline; the local delivery fixes
-and per-event completion checkpoints still need deployment (META.md section 5). Milestones 5–6 are pending.
+and per-event completion checkpoints have rollout instructions in META.md section 5.
+A subsequent local parity revision unifies beta/production viewer handlers and
+caching; migrate beta auth and deploy using META.md section 6. Milestones 5–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.

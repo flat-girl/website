@@ -1,6 +1,6 @@
 # Meta Conversions API operations
 
-**Beta and production are deployed. November 6 production logs confirm Meta accepted ViewContent and Lead, but edge enqueue failures dropped some views. The local delivery fixes in section 5 still need deployment.**
+**Beta and production are deployed. The shared edge architecture is implemented locally; apply the password-preserving migration in section 6 before deploying this revision.**
 
 Both events use SQS. Edge handling captures attribution and queues ViewContent;
 signup queues Lead after an existing successful Brevo create/list write. A worker
@@ -29,6 +29,7 @@ been made by the implementation session.
 ```sh
 make cloud-diff PROFILE=default STACK=access
 make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
+make beta-auth-migrate PROFILE=flat-girl
 make meta-secrets PROFILE=flat-girl SITE_ENV=beta
 make meta-secrets PROFILE=flat-girl SITE_ENV=production
 ```
@@ -102,16 +103,19 @@ Deploy the table/queue/worker before associating the edge producer. Apply the
 access-stack update first so the worker can write its own table:
 
 ```sh
+make beta-auth-migrate PROFILE=flat-girl
 make cloud-diff PROFILE=flat-girl STACK=signup-beta
 make cloud-deploy PROFILE=flat-girl STACK=signup-beta
 make cloud-diff PROFILE=flat-girl STACK=beta
 make cloud-deploy PROFILE=flat-girl STACK=beta
 ```
 
-Beta remains uncached and keeps its CloudFront Function for Basic Auth. Its
-origin-response Lambda runs after authorization and receives `_fbc_beta`, the
-viewer User-Agent/GPC/prefetch headers, and query strings. Production uses viewer
-response so cache hits also generate events. There is no browser view request.
+Both environments use the same viewer-request router and viewer-response tracker,
+with the same cache-policy settings. Beta enables Basic Auth in the shared router,
+which checks its SSM-stored digest before every request, including cache hits, and
+strips Authorization before forwarding. The tracker receives the viewer's own
+cookies, User-Agent, GPC and query string in both environments. There is no
+browser view request. Beta remains noindex and uses its separate dataset/cookie.
 
 Commit reviewed source before using the existing clean-tree site publisher, then:
 
@@ -263,6 +267,7 @@ No frontend rebuild or publication is required for this backend update.
 ```sh
 make cloud-diff PROFILE=default STACK=access
 make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
+make beta-auth-migrate PROFILE=flat-girl
 make cloud-diff PROFILE=flat-girl STACK=signup-beta
 make cloud-deploy PROFILE=flat-girl STACK=signup-beta
 make cloud-diff PROFILE=flat-girl STACK=beta
@@ -285,6 +290,81 @@ one eligible signup. New ViewContent and Lead rows should show both flags true.
 Use the scan in section 4 and the production dataset's Overview. If a view is
 missing, inspect the named edge outcome in the execution region (the observed
 production requests ran in `us-east-2` and `us-west-1`).
+
+### Earlier production routing-version recovery — November 6
+
+Production's first delivery-fix deployment rolled back because the version-ID
+change tried to publish an unchanged routing Lambda again. AWS rejected it with
+`A version for this Lambda function exists (1)`. Beta has no routing Lambda@Edge
+function, so its deployment succeeded.
+
+The local fix preserves the original routing-version identity. Read-only template
+comparison confirmed no beta changes and no production routing changes; only the
+production tracking Lambda/version and CloudFront association change. Rollback
+finished in `UPDATE_ROLLBACK_COMPLETE`, so retry the normal deployment:
+
+```sh
+make cloud-diff PROFILE=flat-girl STACK=production
+make cloud-deploy PROFILE=flat-girl STACK=production
+```
+
+That version-ID correction required no deletion or repeat beta deployment. It was
+verified against the deployed templates. The subsequent shared-router revision
+below intentionally changes routing code in both environments and publishes new versions.
+
+## 6. Align beta and production edge execution
+
+This supersedes beta's original CloudFront-Function/origin-response arrangement.
+Both distributions now use the exact same handler source files:
+
+| Concern | Shared implementation |
+| --- | --- |
+| Routing | `edge-router.cjs`, Lambda@Edge viewer request |
+| Attribution and ViewContent | `edge.cjs`, Lambda@Edge viewer response |
+| Runtime | Node.js 24, x86_64, 512 MB, 5-second function timeout |
+| Caching | Same cache policy and published object Cache-Control values |
+| Environment configuration | Hostname, queues, cookies, credentials and beta-only Basic Auth/noindex |
+
+CloudFront Functions are suitable for faster lightweight routing, but cannot send
+to SQS. AWS [disallows mixing them with Lambda@Edge viewer handlers](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-function-restrictions-all.html).
+Using shared Lambda@Edge handlers makes beta exercise production's tracking/cache
+path. It is a parity correction, not a claim that Lambda is faster for routing.
+
+Beta auth moves to an SSM SecureString at
+`/flat-girl/beta/authorization-sha256`. The migration copies the existing digest
+from the retained KVS without displaying it or changing the password. Only beta's
+routing role can read that parameter; the tracking role cannot read SSM. Auth reads
+are cached for 60 seconds and fail closed after expiry. Missing credentials return
+503; incorrect/missing Authorization returns 401. Production never reads auth configuration.
+
+Wait for any current deployment to finish. Then apply this revision in order:
+
+```sh
+make cloud-diff PROFILE=default STACK=access
+make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
+make beta-auth-migrate PROFILE=flat-girl
+make cloud-diff PROFILE=flat-girl STACK=beta
+make cloud-deploy PROFILE=flat-girl STACK=beta
+make site-verify PROFILE=flat-girl-beta SITE_ENV=beta
+```
+
+Verify beta still requires the existing password, including for cached assets,
+and that authorized page reloads produce ViewContent records on cache hits.
+Then deploy the same handlers to production:
+
+```sh
+make cloud-diff PROFILE=flat-girl STACK=production
+make cloud-deploy PROFILE=flat-girl STACK=production
+make site-verify PROFILE=flat-girl-production SITE_ENV=production
+make meta-status PROFILE=flat-girl SITE_ENV=production
+```
+
+No frontend rebuild, signup deployment or Meta credential changes are needed for
+this parity revision. For future password rotation, `make beta-auth PROFILE=flat-girl`
+updates both SSM and the retained KVS; allow 60 seconds for auth caches to refresh.
+Keep the KVS for rollback compatibility. IaC tests assert matching triggers,
+cache policy and router source. Synthesized JSON is compacted to keep the existing
+inline-template limit without adding an asset-publishing system.
 
 ## Queue behavior and recovery
 

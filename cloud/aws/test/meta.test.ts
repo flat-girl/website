@@ -5,7 +5,7 @@ import vm from 'node:vm'
 import { createHash } from 'node:crypto'
 import { App } from 'aws-cdk-lib'
 import { Template } from 'aws-cdk-lib/assertions'
-import { lambdaCode, edgeRouteCode } from '../lib/meta.js'
+import { lambdaCode, edgeRouteCode, codeHash } from '../lib/meta.js'
 import { config } from '../lib/config.js'
 import { Certificates, Site } from '../lib/stacks.js'
 import { Access } from '../lib/access.js'
@@ -91,9 +91,9 @@ test('edge skips assets, HEAD, errors and prefetch; enqueue failure returns the 
   f.runtime.send = async () => { throw new Error('private-payload') }
   const event = edgeEvent(); assert.equal(await f.handler(event), event.Records[0].cf.response); assert.equal(f.failures(), 1)
 })
-test('uncached beta origin response uses only beta attribution despite its S3 host header', async () => {
-  const f = edgeFixture(cfg('beta')), event = edgeEvent({ headers: { host: [{ value: 'bucket.s3.amazonaws.com' }], 'user-agent': [{ value: 'Browser' }], cookie: [{ value: `_fbc=${fbc}` }] } })
-  event.Records[0].cf.config.eventType = 'origin-response'
+test('beta viewer response uses only beta attribution and its canonical viewer host', async () => {
+  const f = edgeFixture(cfg('beta')), event = edgeEvent({ headers: { host: [{ value: 'beta.flatgirl.net' }], 'user-agent': [{ value: 'Browser' }], cookie: [{ value: `_fbc=${fbc}` }] } })
+  event.Records[0].cf.config.eventType = 'viewer-response'
   const handler = edge.createHandler('beta', { runtime: f.runtime, now: () => now })
   assert.match((await handler(event)).headers['set-cookie'][0].value, /^_fbc_beta=/)
   assert.equal(f.sent[0].event_source_url, 'https://beta.flatgirl.net/')
@@ -316,7 +316,7 @@ test('assembled Lambda entry files load without requiring local helper files; ro
     vm.runInContext(lambdaCode(file, 'beta'), context)
     assert.equal(typeof context.exports.handler, 'function'); assert.equal(typeof context.exports.createHandler, 'function')
   }
-  const context = vm.createContext({ exports: {} }); vm.runInContext(edgeRouteCode(), context)
+  const context = vm.createContext({ exports: {}, require, Buffer, AbortSignal }); vm.runInContext(edgeRouteCode(), context)
   const request = { uri: '/offer', querystring: 'fbclid=x%2By&x=1&x=2&__proto__=safe', headers: { host: [{ value: 'www.flatgirl.net' }] } }
   const result = await context.exports.handler({ Records: [{ cf: { request } }] })
   assert.equal(result.headers.location[0].value, 'https://flatgirl.net/?' + request.querystring)
@@ -330,14 +330,28 @@ test('edge associations preserve production caching and beta auth; producer IAM 
     const distribution: any = Object.values(template.Resources).find((r: any) => r.Type === 'AWS::CloudFront::Distribution')
     const behavior = distribution.Properties.DistributionConfig.DefaultCacheBehavior
     const events = behavior.LambdaFunctionAssociations.map((a: any) => a.EventType)
-    assert.deepEqual(events, env === 'beta' ? ['origin-response'] : ['viewer-response', 'viewer-request'])
-    assert.equal(behavior.FunctionAssociations?.length ?? 0, env === 'beta' ? 1 : 0)
+    assert.deepEqual(events, ['viewer-response', 'viewer-request'])
+    assert.equal(behavior.FunctionAssociations?.length ?? 0, 0)
+    const versions = Object.keys(template.Resources).filter(id => template.Resources[id].Type === 'AWS::Lambda::Version')
+    const trackingCode = lambdaCode('edge', env, `https://sqs.us-east-1.amazonaws.com/${p.account}/flat-girl-${env}-meta`)
+    assert.ok(versions.includes(`MetaEdgeVersion${codeHash(trackingCode + 512)}`))
+    const routingId = `EdgeRoutesVersion${codeHash(edgeRouteCode(env) + 512)}`
+    assert.deepEqual(versions.filter(id => id.startsWith('EdgeRoutesVersion')), [routingId])
+    assert.ok(JSON.stringify(behavior.LambdaFunctionAssociations[1]).includes(routingId))
+    assert.equal(behavior.OriginRequestPolicyId, undefined)
     const functions: any[] = Object.values(template.Resources).filter((r: any) => r.Type === 'AWS::Lambda::Function')
     for (const fn of functions) {
       assert.deepEqual(fn.Properties.Architectures, ['x86_64']); assert.equal(fn.Properties.Environment, undefined)
-      assert.equal(fn.Properties.MemorySize, fn.Properties.FunctionName.endsWith('meta-edge') ? 512 : 128)
+      assert.equal(fn.Properties.MemorySize, 512)
     }
   }
+  const betaCache = Object.values(Template.fromStack(sites.beta).findResources('AWS::CloudFront::CachePolicy'))[0] as any
+  const productionCache = Object.values(Template.fromStack(sites.production).findResources('AWS::CloudFront::CachePolicy'))[0] as any
+  const comparable = (value: any) => { const result = structuredClone(value.Properties.CachePolicyConfig); delete result.Name; return result }
+  assert.deepEqual(comparable(betaCache), comparable(productionCache))
+  assert.equal(edgeRouteCode('beta').split('\n').slice(1).join('\n'), edgeRouteCode('production').split('\n').slice(1).join('\n'))
+  assert.equal(lambdaCode('edge', 'beta', 'beta-queue').split('\n').slice(1).join('\n'),
+    lambdaCode('edge', 'production', 'production-queue').split('\n').slice(1).join('\n'))
   const policies: any[] = Object.entries(Template.fromStack(access).toJSON().Resources).filter(([id, r]: any) =>
     r.Type === 'AWS::IAM::Policy' && /SignupRuntime|MetaEdgeRuntime/.test(id)).map(([, r]) => r)
   assert.equal(policies.length, 4)

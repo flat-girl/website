@@ -6,6 +6,7 @@ import difflib
 import getpass
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -35,9 +36,17 @@ def preflight(aws):
     print(f"Account {p['account']}; zone {p['hostedZoneId']}; {len(matches)} matching distributions. Snapshot: .deploy/preflight.json")
     if aws.identity['Arn'].endswith(':root'): print('Discovery identity is root; configure a project operator before normal deployment.')
 
-def auth(aws):
+def auth(aws, migrate=False):
     aws.writer()
     store=aws.outputs('beta')['AuthStoreArn']
+    parameter='/flat-girl/beta/authorization-sha256'
+    if migrate:
+        digest=aws.call('cloudfront-keyvaluestore','get-key',KvsARN=store,Key='authorization-sha256')['Value']
+        if not isinstance(digest,str) or not re.fullmatch(r'[a-f0-9]{64}',digest):
+            raise ValueError('Existing beta authorization digest is invalid; run beta-auth to set credentials')
+        aws.call('ssm','put-parameter',Name=parameter,Value=digest,Type='SecureString',Overwrite=True)
+        print('Existing beta credential copied to SSM. Password unchanged; deploy the shared beta router next.')
+        return
     username=input('Beta username: ').strip()
     password=getpass.getpass('Beta password: ')
     confirm=getpass.getpass('Repeat beta password: ')
@@ -49,6 +58,7 @@ def auth(aws):
         raise ValueError('Passwords do not match')
     value='Basic '+base64.b64encode((username+':'+password).encode()).decode()
     digest=hashlib.sha256(value.encode()).hexdigest()
+    aws.call('ssm','put-parameter',Name=parameter,Value=digest,Type='SecureString',Overwrite=True)
     description=aws.call('cloudfront-keyvaluestore','describe-key-value-store',KvsARN=store)
     aws.call('cloudfront-keyvaluestore','put-key',KvsARN=store,Key='authorization-sha256',Value=digest,IfMatch=description['ETag'])
     print('Beta credential updated. Verify new access and old-credential rejection after propagation.')
@@ -56,7 +66,7 @@ def auth(aws):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('command',choices=['preflight','diff','deploy','beta-enabled','auth'])
-    parser.add_argument('action',nargs='?',choices=['set'])
+    parser.add_argument('action',nargs='?',choices=['set','migrate'])
     parser.add_argument('--profile',required=True)
     parser.add_argument('--stack',choices=list(STACKS))
     parser.add_argument('--read-only',action='store_true')
@@ -65,7 +75,7 @@ def main():
     args=parser.parse_args()
     p=project();aws=AWS(args.profile,p,read_only=args.command in ('preflight','diff') or args.read_only)
     if args.command=='preflight': return preflight(aws)
-    if args.command=='auth': return auth(aws)
+    if args.command=='auth': return auth(aws,migrate=args.action=='migrate')
     if args.command=='beta-enabled':
         if args.value is None: parser.error('--value is required')
         args.stack='beta';p['betaEnabled']=args.value=='true'

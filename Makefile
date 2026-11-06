@@ -15,7 +15,7 @@ bootstrap = $(if $(filter 1,$(BOOTSTRAP)),--bootstrap,$(if $(filter 0,$(BOOTSTRA
 release = $(if $(strip $(RELEASE)),--release $(call quote,$(RELEASE)))
 no_dry_run = $(if $(filter 0,$(DRY_RUN)),,$(error This target does not support DRY_RUN; use cloud-diff for infrastructure previews))
 
-.PHONY: help cloud-preflight cloud-diff cloud-deploy beta-auth beta-enabled \
+.PHONY: help cloud-preflight cloud-diff cloud-deploy beta-auth beta-auth-migrate beta-enabled \
         sources-import sources-pull images-prepare images-ensure images-check \
         site-build site-publish site-verify site-rollback signup-secrets signup-preflight signup-status signup-enabled
 
@@ -59,6 +59,9 @@ cloud-deploy:
 
 beta-auth:
 	$(no_dry_run)$(PYTHON) tools/cloud.py auth set $(profile)
+
+beta-auth-migrate:
+	$(no_dry_run)$(PYTHON) tools/cloud.py auth migrate $(profile)
 
 beta-enabled:
 	$(no_dry_run)$(PYTHON) tools/cloud.py beta-enabled $(profile) --value $(call required,ENABLED)
