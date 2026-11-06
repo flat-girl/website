@@ -10,6 +10,7 @@
     "images:check": "uv run --locked --project ../tools python ../tools/image_build.py --check",
     "test:images": "uv run --locked --project ../tools python -m unittest discover -s ../tools/tests",
     "test:cdn": "uv run --locked --project ../tools python ../tools/check_cdn.py --browser",
+    "test:signup": "uv run --locked --project ../tools python ../tools/check_signup.py",
     "predev": "npm run images:prepare",
     "dev": "nuxt dev --host 127.0.0.1",
     "pregenerate": "npm run images:prepare",

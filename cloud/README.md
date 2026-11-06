@@ -1,20 +1,21 @@
 # Flat Girl AWS hosting
 
-Local infrastructure and deployment tooling for milestone 2. Nothing has been
-deployed by the agent. Start with [access setup](ACCESS.md), then follow
-[deployment](DEPLOYMENT.md). [Images](IMAGES.md) describes source recovery and
-the shared CDN.
+Infrastructure and deployment tooling for completed milestones 2–3. Hosting and
+signup were deployed by the user. Start with [access setup](ACCESS.md), then follow
+[deployment](DEPLOYMENT.md). [Signup](SIGNUP.md) covers the live notification
+services; [Images](IMAGES.md) describes source recovery and the shared CDN.
 
 Run `make help` to list the operator commands. The root Makefile calls the Python
 tools through uv; there are no shell-wrapper scripts. AWS targets require an
 explicit `PROFILE`, and site targets also require `SITE_ENV`.
 
-The architecture uses five stacks: access, shared certificate, shared images,
-beta site, production site. Four private/versioned S3 buckets hold sources plus
+The architecture uses seven stacks: access, shared certificate, shared images,
+beta site, production site, beta signup, and production signup. Four private/versioned S3 buckets hold sources plus
 release archives, processed variants, beta, and production. Three CloudFront
 distributions expose the two sites and the processed images. Production and
 images do not depend on beta. Basic Auth protects beta's site files; shared
-images are public.
+images are public. Signup uses separate API/Lambda settings with shared provider
+keys, beta list 5, and production list 4. Both signup services are enabled.
 
 ## Local checks
 

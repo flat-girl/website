@@ -6,7 +6,8 @@ live rollback drill was waived. Resource independence was checked in deployed
 templates; a live beta disable/re-enable drill was not observed. See the
 [completion evidence](../docs/milestone-2-plan.md#live-completion-handoff--november-5-2026).
 For a new machine/operator, complete [access setup](ACCESS.md) first.
-The current production artifact is the plain scaffold with temporary noindex.
+The current production artifact is the scaffold with working signup and temporary
+noindex. Milestone 3 signup is deployed; see [SIGNUP.md](SIGNUP.md).
 It is still publicly accessible. Beta's password does not protect shared images.
 
 ## 1. Review and provision shared resources and beta
@@ -125,3 +126,16 @@ There is no earlier production release on the first rollout. Recover by fixing
 forward, or review disabling the new distribution while repairing it. If domain
 content existed before a later rollout, preserve and use its documented DNS target.
 Do not claim rollback succeeded until the restored bytes have been verified live.
+
+## Signup build settings (milestone 3)
+
+The signup backend rollout and shared-secret setup are in [SIGNUP.md](SIGNUP.md).
+`make site-build` reads `cloud/signup.json` for the selected environment and
+explicitly bakes the endpoint, enabled flag, environment, and shared public site
+key into Nuxt. An enabled build requires matching enabled signup-stack outputs.
+Publisher roles never read provider secrets. Public settings are recorded in the
+private release manifest; old milestone 2 manifests remain valid without them.
+
+Changing a flag/key requires a new site build. Backend disable is a separate
+stack update and stops provider writes from cached pages once it completes.
+Frontend rollback does not undo contacts or Brevo welcome emails.

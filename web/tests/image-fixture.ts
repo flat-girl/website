@@ -1,8 +1,10 @@
 import { test as base, type BrowserContext } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { installSignupFixture } from './signup-fixture'
 
 export async function installImageFixture(context: BrowserContext) {
+  await installSignupFixture(context)
   if (process.env.FLAT_GIRL_TEST_CDN !== 'true') return
   const root=process.env.FLAT_GIRL_TEST_IMAGE_ROOT
   if (!root) throw new Error('CDN fixture needs FLAT_GIRL_TEST_IMAGE_ROOT')
