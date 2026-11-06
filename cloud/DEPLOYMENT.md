@@ -1,6 +1,11 @@
 # Local rollout and rollback
 
-**User-run rollout; not yet executed.** Complete [access setup](ACCESS.md) first.
+**User-run rollout completed and hosting verified November 5, 2026.** These steps
+remain the operating runbook. Password rotation was confirmed by the user; the
+live rollback drill was waived. Resource independence was checked in deployed
+templates; a live beta disable/re-enable drill was not observed. See the
+[completion evidence](../docs/milestone-2-plan.md#live-completion-handoff--november-5-2026).
+For a new machine/operator, complete [access setup](ACCESS.md) first.
 The current production artifact is the plain scaffold with temporary noindex.
 It is still publicly accessible. Beta's password does not protect shared images.
 

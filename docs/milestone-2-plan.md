@@ -1,10 +1,12 @@
 # Milestone 2 — AWS hosting, shared images, and local deployment
 
-**Status: implemented and locally verified November 5, 2026. Live rollout remains user-run and unverified.**
+**Status: complete for the core hosting scope, November 5, 2026. Beta and production are deployed and verified.**
 
 The user approved proceeding after review. This document records the design and
-rollout sequence. Milestone 1 is complete. Read-only AWS discovery is recorded in
-[access setup](../cloud/ACCESS.md); no AWS writes have been performed.
+rollout sequence. The user completed live rollout; the agent performed read-only
+verification. The user waived the live rollback drill and confirmed password
+rotation. Deployed resource separation was verified; no live beta shutdown drill
+was observed. See the completion evidence at the end of this document.
 
 **Target result:** deploy the existing scaffold from your machine to protected
 `beta.flatgirl.net` and public `flatgirl.net`, with independent hosting, shared
@@ -18,7 +20,7 @@ User-run account setup, AWS propagation, and live verification are separate.
 | Decision | Proposed baseline | What remains to settle |
 | --- | --- | --- |
 | AWS and DNS ownership | Dedicated Flat Girl resources in `066540957026`, `us-east-1`, Route 53 zone `Z06174692C3V38JQV6ZWT` | Discovery verified public delegation; private operator login remains user-run |
-| Public scaffold | Verify beta first, then publish the current heading/carousel to production; temporary production `noindex` until final launch work | Approved plan baseline; production rollout remains pending |
+| Public scaffold | Verify beta first, then publish the current heading/carousel to production; temporary production `noindex` until final launch work | Deployed and verified; temporary noindex remains intentional |
 | Shared image visibility | Processed WebPs are publicly accessible through one image CDN, including images used by beta; originals remain private | Approved baseline; beta is not confidential image storage |
 | Beta credentials | CloudFront Function plus KeyValueStore containing a credential digest; private local prompt sets/rotates credentials outside templates and frontend builds | Implemented; values are entered privately during rollout |
 | Retention and operations | Keep originals, old variants, old hashed site assets, and deployment archives; manual rollout with separate beta/production targets | Agree the defaults; defer automated cleanup and GitHub deployment to later work |
@@ -420,10 +422,10 @@ providers. No signup/tracking requests are expected in this milestone.
 ## Completion and handoff
 
 - [x] Local implementation is complete, required checks pass, and documented commands match the actual CLI.
-- [ ] Beta is live-verified, protected on every site path, noindexed, and credential rotation has been exercised.
-- [ ] Production is live-verified at `flatgirl.net`, with working www/HTTPS redirects and the expected release/images.
-- [ ] Originals remain private, clean CDN builds work, unchanged image preparation does no transfer/render/upload, and beta can be disabled independently.
-- [ ] Archived-artifact rollback has been demonstrated on beta and the production recovery procedure and exact evidence are recorded.
+- [x] Beta has a live verification record; unauthenticated page/assets are denied, noindex works, and the user confirmed password rotation.
+- [x] Production is live-verified at `flatgirl.net`, with working www/HTTPS redirects and the expected release/images.
+- [x] Originals remain private, clean CDN builds work, unchanged image checks report zero transfers/renders/uploads, and deployed site/shared resources are independent.
+- [x] Release archives and recovery instructions are recorded. The live rollback demonstration was waived by the user; it is not claimed as tested.
 
 **Original planning handoff (before implementation):** inspected the current scaffold, image tool, generated file
 layout, and relevant local reference code; consulted AWS documentation for OAC,
@@ -431,9 +433,7 @@ certificates, KVS/runtime, caching, and conditional writes. No infrastructure wa
 inspected live or modified, no dependencies were installed, and no application or
 deployment code was changed. Development was subsequently approved; the implementation handoff below supersedes this planning snapshot.
 
-**Next action:** review the access template using the read-only command in
-[ACCESS.md](../cloud/ACCESS.md). Production uses the approved scaffold/noindex
-baseline; live rollout is still pending.
+**Next action:** plan milestone 3, Turnstile and Brevo signup.
 
 ## Implementation handoff — November 5, 2026
 
@@ -478,15 +478,58 @@ Implementation adjustments to the draft:
    The CDN fixture copies dependencies instead of symlinking them because Nuxt
    resolves server imports/caches against real module paths.
 
-Live-only work remains: provision access/resources, privately configure login and
-beta auth, import originals, verify remote image reuse, publish both environments,
-exercise beta credential rotation/rollback, and demonstrate beta independence.
-The full milestone is not complete until those observations are recorded.
-
-**Next action:** open [access setup](../cloud/ACCESS.md) and review the generated
-`FlatGirlAccess.template.json` or `.deploy/access.diff` before the user-run bootstrap.
+At the original implementation handoff, live rollout was still pending. The
+completion record below supersedes that status and records the user's waiver
+and the limits of observed verification.
 
 The shell wrappers were subsequently replaced with root Makefile targets at the
 user's request. Python tool behavior is unchanged. `make help` lists commands;
 profile/environment inputs are explicit. Make target dispatch and argument guards
 were checked offline without calling AWS.
+
+## Live completion handoff — November 5, 2026
+
+The core milestone 2 acceptance criteria in the roadmap are satisfied. Both sites
+serve the scaffold through independent hosting, shared processed images work,
+originals remain private, and local publication/verification/recovery commands are
+documented. Rollout was executed by the user; completion checks were read-only.
+
+| Area | Observed evidence |
+| --- | --- |
+| Infrastructure | All five Flat Girl stacks are `CREATE_COMPLETE` |
+| Production | `https://flatgirl.net`; release `20261106T011721Z-320dc4f4099d`, reverified at 7:22 p.m. America/Chicago on November 5 |
+| Beta | `https://beta.flatgirl.net`; release `20261106T001153Z-c2bcf2c1e246`, verified at 7:11 p.m. America/Chicago; private verification proof is archived |
+| Authentication | Fresh unauthenticated requests to beta's homepage and a JS asset returned 401/noindex on both custom and CloudFront hostnames; password rotation confirmed by the user |
+| Images and privacy | Six CDN variants passed checksum/type/cache checks; metadata check reported 6 hits, 0 downloads, 0 renders, 0 uploads, 0 missing; anonymous source/site-origin access denied |
+| Routing and browser behavior | Production bytes, redirects, headers, and noindex passed the verifier; live Chrome checks passed at 375px and 1280px, including carousel navigation/full-size CDN links, plus the no-JavaScript gallery |
+| Separation and DNS | Separate beta/production buckets and three distinct distributions; production/images/certificate templates have no beta-stack references; all original DNS records preserved |
+
+Release IDs use UTC timestamps, so their `20261106` prefix corresponds to the
+evening of November 5 in the user's America/Chicago timezone.
+
+| Resource | Deployed identity |
+| --- | --- |
+| Beta distribution | `EC80IE7BRT77J` / `d2juao8jjhvglt.cloudfront.net` |
+| Production distribution | `EN7BI4NYGI7I9` / `d3i47mphxtr1dk.cloudfront.net` |
+| Image distribution | `EMQHOGJ7843NP` / `d3b8w3sq5hpb4e.cloudfront.net` |
+| Site buckets | `flat-girl-beta-066540957026-us-east-1`, `flat-girl-production-066540957026-us-east-1` |
+| Private source/archive and variants buckets | `flat-girl-sources-066540957026-us-east-1`, `flat-girl-variants-066540957026-us-east-1` |
+
+Verification limits and scope decisions:
+
+1. The user explicitly does not require the live rollback drill. Only one beta
+   release is archived; no rollback to a distinct prior release is claimed.
+   Offline artifact-restoration tests and the operating instructions remain available.
+2. Password rotation is user-confirmed. No password or credential digest was
+   requested or read during this audit.
+3. The beta distribution is enabled and its stack history contains no updates.
+   Resource independence is established by deployed topology, not by a live
+   disable/re-enable exercise. That additional operational drill remains untested.
+4. The older local beta journal still says `awaiting-verification`, despite the
+   later successful local and archived verification records. Those proof records
+   establish verification; the stale journal is not used as evidence of a failure.
+
+Production intentionally remains the minimal scaffold with noindex. Signup,
+tracking, GitHub automation, and final page content remain milestones 3–6.
+
+**Next action:** write the detailed milestone 3 plan before implementation.

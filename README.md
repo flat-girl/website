@@ -1,7 +1,8 @@
 # Boring Flat Girl
 
 Minimal Nuxt + Tailwind static site: a heading, Sarah front/back carousel,
-and full-size image links. Milestone 1 is locally verified; AWS is not deployed.
+and full-size image links. Milestones 1–2 are complete; beta and production are
+deployed and verified. Production: <https://flatgirl.net>.
 Final landing-page content and branding come later.
 See the [roadmap](docs/IMPLEMENTATION-PLAN.md) and
 [milestone 1 plan](docs/milestone-1-plan.md).
@@ -85,9 +86,9 @@ Milestone 5 adds GitHub deployment:
 - Push to `main`: deploy beta only when `DEV_DEPLOY_ENABLED=true`.
 - Publish a non-prerelease GitHub release: deploy its exact tagged commit to production.
 
-Milestone 2 infrastructure and local deployment commands are implemented; live
-rollout remains user-run and unverified. Start with [AWS access](cloud/ACCESS.md),
-then [deployment and rollback](cloud/DEPLOYMENT.md). GitHub automation stays in
+Milestone 2 infrastructure and local deployment commands are live-verified.
+See [AWS access](cloud/ACCESS.md) and [deployment and rollback](cloud/DEPLOYMENT.md)
+for ongoing operations. GitHub automation stays in
 milestone 5. See the [milestone 2 plan](docs/milestone-2-plan.md).
 
 Run `make help` for local AWS commands. Targets call the Python tools through uv:
