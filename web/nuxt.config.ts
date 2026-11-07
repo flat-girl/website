@@ -1,4 +1,3 @@
-import tailwindcss from '@tailwindcss/vite'
 import { env } from 'node:process'
 
 export default defineNuxtConfig({
@@ -6,14 +5,20 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   runtimeConfig: {
     public: {
-      signupEnabled: env.FLAT_GIRL_SIGNUP_ENABLED === 'true',
       signupEndpoint: env.FLAT_GIRL_SIGNUP_ENDPOINT || '',
       turnstileSiteKey: env.FLAT_GIRL_TURNSTILE_SITE_KEY || '',
-      signupEnvironment: env.FLAT_GIRL_SIGNUP_ENVIRONMENT || 'local',
+    },
+  },
+  $development: {
+    runtimeConfig: {
+      public: {
+        signupEndpoint: env.FLAT_GIRL_SIGNUP_ENDPOINT || '/api/subscribe',
+        // Cloudflare's public test key exercises the same verification UI locally.
+        turnstileSiteKey: env.FLAT_GIRL_TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+      },
     },
   },
   css: ['~/assets/css/main.css'],
-  vite: { plugins: [tailwindcss()] },
   app: {
     head: {
       htmlAttrs: { lang: 'en' },

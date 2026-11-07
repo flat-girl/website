@@ -2,9 +2,6 @@
 import { loadTurnstile, type TurnstileApi } from '~/utils/turnstile'
 
 const config = useRuntimeConfig().public
-const mockSignup = import.meta.dev
-const enabled = mockSignup || config.signupEnabled === true
-const signupEndpoint = mockSignup ? '/api/subscribe' : config.signupEndpoint
 const email = ref('')
 const website = ref('')
 const token = ref('')
@@ -21,6 +18,8 @@ let widgetId: string | undefined
 let attempt = 0
 let controller: AbortController | undefined
 
+watch(email, () => { message.value = '' })
+
 function verificationError(text = 'Verification could not finish. Please try again.') {
   token.value = ''
   verificationFailed.value = true
@@ -31,12 +30,7 @@ async function verify() {
   const current = ++attempt
   token.value = ''
   verificationFailed.value = false
-  if (mockSignup) {
-    token.value = `local-signup-${current}`
-    verificationMessage.value = ''
-    return
-  }
-  verificationMessage.value = 'Loading verification…'
+  verificationMessage.value = current === 1 ? 'Checking for bots...' : ''
   if (widgetId !== undefined) turnstile?.remove(widgetId)
   widgetId = undefined
   try {
@@ -66,7 +60,7 @@ async function verify() {
 }
 
 async function submit() {
-  if (!enabled || !mounted.value || busy.value || accepted.value || !token.value) return
+  if (!mounted.value || busy.value || accepted.value || !token.value) return
   if (website.value) { message.value = 'Unable to process signup. Please refresh and try again.'; return }
   busy.value = true
   message.value = ''
@@ -77,15 +71,15 @@ async function submit() {
   const timer = window.setTimeout(() => request.abort(), 18000)
   let retry = false
   try {
-    const result = await fetch(signupEndpoint, {
+    const result = await fetch(config.signupEndpoint, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       credentials: 'include', redirect: 'error', signal: request.signal,
       body: JSON.stringify({ email: email.value.trim(), website: website.value, turnstileToken: submittedToken }),
     })
     if (!result.ok) {
-      if (result.status === 429) message.value = 'Too many requests right now. Please wait a minute and try again.'
-      else if (result.status === 403) message.value = 'Please complete a new verification and try again.'
-      else if (result.status === 400) message.value = 'Please check your email address and try again.'
+      if (result.status === 429) message.value = 'Rate limited. Chill for a sec and try again.'
+      else if (result.status === 403) message.value = 'Gotta make sure you\'re not a bot.'
+      else if (result.status === 400) message.value = 'You sure that\'s your email?.'
       throw new Error('Signup failed')
     }
     const body = await result.json()
@@ -100,7 +94,7 @@ async function submit() {
     success.value?.focus()
   } catch {
     if (!mounted.value) return
-    if (!message.value) message.value = 'We couldn’t confirm your signup. Your email is still here—please try again.'
+    if (!message.value) message.value = 'Not sure what\'s up. Try again? Reach out on instagram?'
     retry = true
   } finally {
     window.clearTimeout(timer)
@@ -114,7 +108,7 @@ async function submit() {
 
 onMounted(() => {
   mounted.value = true
-  if (enabled) void verify()
+  void verify()
 })
 onBeforeUnmount(() => {
   mounted.value = false
@@ -125,42 +119,156 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="mt-8 max-w-md" aria-labelledby="signup-heading">
-    <h2 id="signup-heading" class="text-2xl font-bold">Notify me when it drops</h2>
-    <p v-if="!enabled" class="mt-3">Notifications aren't available yet. Check back soon.</p>
-    <template v-else>
-      <p v-if="mockSignup" class="mt-2 text-sm font-semibold">Local preview — signups are simulated; no email is sent.</p>
-      <p v-else-if="config.signupEnvironment === 'beta'" class="mt-2 text-sm font-semibold">Test signup — this form uses our test list.</p>
-      <p v-if="accepted" ref="success" tabindex="-1" role="status" class="mt-4 rounded border border-green-700 p-4 focus:outline-2 focus:outline-offset-4">
-        Thanks—your notification request has been received.
-      </p>
-      <form v-else class="mt-4" :aria-busy="busy" @submit.prevent="submit">
-        <label for="signup-email" class="block font-semibold">Email address</label>
-        <input id="signup-email" v-model="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"
-          :spellcheck="false" maxlength="254" required :disabled="!mounted || busy" aria-describedby="signup-blurb signup-message"
-          placeholder="you@example.com" class="mt-2 w-full rounded border border-gray-500 px-3 py-3 text-base focus:outline-2 focus:outline-offset-2">
-        <div class="signup-decoy" aria-hidden="true" inert>
-          <label for="signup-website">Website</label>
-          <input id="signup-website" v-model="website" name="website" type="text" tabindex="-1" autocomplete="off">
-        </div>
-        <p id="signup-blurb" class="mt-3 text-sm">Submit your email to get the Boring Flat Girl launch notification. You can unsubscribe anytime.</p>
-        <p class="mt-2 text-sm">Signing up does not reserve one of the 500 units.</p>
-        <div class="mt-3">
-          <div ref="challenge" />
-          <p role="status" class="text-sm">{{ verificationMessage }}</p>
-          <button v-if="verificationFailed" type="button" :disabled="busy" class="mt-2 rounded py-2 underline focus:outline-2 focus:outline-offset-2" @click="verify">Retry verification</button>
-        </div>
-        <button type="submit" :disabled="!mounted || busy || !token" class="mt-3 w-full rounded bg-black px-4 py-3 font-semibold text-white focus:outline-2 focus:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-50">
-          {{ busy ? 'Submitting…' : 'Notify me when it drops' }}
-        </button>
-        <p id="signup-message" role="alert" class="mt-3 text-sm">{{ message }}</p>
-        <p v-if="!mounted" class="mt-3 text-sm">Please enable JavaScript to sign up for the notification.</p>
-      </form>
-      <p v-if="!mockSignup" id="signup-privacy" class="mt-4 text-sm text-gray-700">We use Brevo to manage the notification list and send our welcome email, and Cloudflare Turnstile to prevent spam.</p>
-    </template>
+  <section class="signup" aria-labelledby="signup-heading">
+    <h2 id="signup-heading">Get notified when we drop</h2>
+    <p class="signup-intro">We will let you know as soon as they are available; can't guarantee your spot, but you'll be the first to know.</p>
+    <p v-if="accepted" ref="success" tabindex="-1" role="status" class="signup-success">
+      Request received; we will be in touch.
+    </p>
+    <form v-else :aria-busy="busy" novalidate @submit.prevent="submit">
+      <label for="signup-email" class="signup-label">Email address</label>
+      <input id="signup-email" v-model="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"
+        :spellcheck="false" maxlength="254" required :disabled="!mounted || busy" aria-describedby="signup-message"
+        placeholder="you@example.com" class="signup-email">
+      <div class="signup-decoy" aria-hidden="true" inert>
+        <label for="signup-website">Website</label>
+        <input id="signup-website" v-model="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+      <div class="signup-verification">
+        <div ref="challenge" />
+        <p role="status">{{ verificationMessage }}</p>
+        <button v-if="verificationFailed" type="button" :disabled="busy" class="signup-retry" @click="verify">Retry verification</button>
+      </div>
+      <p id="signup-message" role="alert" class="signup-error">{{ message }}</p>
+      <button type="submit" :disabled="!mounted || busy || !token" class="signup-submit">
+        {{ busy ? 'Submitting…' : 'Keep me posted' }}
+      </button>
+      <p v-if="!mounted" class="signup-help">Enable JavaScript to sign up; gotta ensure you're not a bot.</p>
+    </form>
+    <p id="signup-privacy" class="signup-privacy">You can unsubscribe if you feel like it, but we recommend against it.</p>
   </section>
 </template>
 
 <style scoped>
+.signup {
+  margin-top: 2.5rem;
+  margin-inline: auto;
+  max-width: 28rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  line-height: 1.333333;
+  font-weight: 700;
+}
+
+.signup-intro,
+.signup-help {
+  margin-top: 0.75rem;
+}
+
+.signup-verification,
+.signup-submit {
+  margin-top: 0.5rem;
+}
+
+.signup-disclaimer,
+.signup-retry,
+.signup-email {
+  margin-top: 0.5rem;
+}
+
+form,
+.signup-success,
+.signup-privacy {
+  margin-top: 1rem;
+}
+
+.signup-help,
+.signup-disclaimer,
+.signup-verification p,
+.signup-privacy {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.signup-label,
+.signup-submit {
+  font-weight: 600;
+}
+
+.signup-label {
+  display: block;
+}
+
+.signup-email {
+  width: 100%;
+  border: 1px solid #6b7280;
+  border-radius: 0.25rem;
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+
+.signup-email::placeholder {
+  color: color-mix(in oklab, currentcolor 50%, transparent);
+  opacity: 1;
+}
+
+.signup-success {
+  border: 1px solid #15803d;
+  border-radius: 0.25rem;
+  padding: 1rem;
+}
+
+.signup-retry {
+  text-decoration: underline;
+}
+
+.signup-error {
+  color: #b91c1c;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+
+.signup-error:not(:empty) {
+  margin-top: 0.5rem;
+}
+
+.signup-submit {
+  padding: 0.625rem 1rem;
+  background: black;
+  color: white;
+}
+
+.signup-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.signup-email:focus {
+  outline: none;
+  border-color: #111;
+}
+
+.signup-retry:focus {
+  outline: 2px solid #155dfc;
+  outline-offset: 2px;
+}
+
+.signup-success:focus {
+  outline: 2px solid #15803d;
+  outline-offset: -2px;
+}
+
+.signup-submit:focus {
+  outline: 2px solid #155dfc;
+  outline-offset: 4px;
+}
+
+.signup-privacy {
+  color: #374151;
+}
+
 .signup-decoy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 </style>
