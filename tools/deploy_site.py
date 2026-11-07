@@ -79,7 +79,11 @@ def verify_images(aws,receipt):
     if receipt.get('account')!=aws.p['account'] or receipt.get('bucket')!=out['VariantsBucketName'] or receipt.get('origin')!=out['ImageBaseUrl']:
         raise ValueError('Archived image destination differs from live infrastructure')
     for key,obj in receipt['objects'].items():
-        entry=dict(key=key,**{k:obj[k] for k in ('width','height','fingerprint')})
+        # Receipts omit transforms; the archived key preserves the output format.
+        # Use it instead of current recipes so older releases remain publishable.
+        image_format=Path(key).suffix.removeprefix('.')
+        if image_format not in ('webp','png'):raise ValueError(f'Unsupported archived image format: {key}')
+        entry=dict(key=key,transform={'format':image_format},**{k:obj[k] for k in ('width','height','fingerprint')})
         if remote_variant(aws,out['VariantsBucketName'],entry)!=obj:raise ValueError(f'Archived image missing or changed: {key}')
 
 def build(aws,env):

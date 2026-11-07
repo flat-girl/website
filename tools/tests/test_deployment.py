@@ -13,7 +13,7 @@ from prepare_images import prepare,source_info,sha256,write_json
 from image_plan import plan,validate_receipt,install_receipt,IMMUTABLE
 from remote_images import ensure,remote_variant,immutable_upload,checksum64,restore
 from aws_common import AwsError,bucket
-from deploy_site import classify,file_manifest,publish_files,validate_artifact,archive,restore_release,redirect_matches,check_redirect
+from deploy_site import classify,file_manifest,publish_files,validate_artifact,archive,restore_release,redirect_matches,check_redirect,verify_images
 from image_plan import digest
 import remote_images
 
@@ -68,6 +68,27 @@ class DeploymentTests(unittest.TestCase):
             metadata = install_receipt(receipt, root)
             self.assertEqual(metadata['images'][-1]['recipe'], 'favicon')
             self.assertEqual(ensure(aws, check=True, root=root)['objects'], receipt['objects'])
+            # Archived receipts omit transforms and must work independently of today's recipes.
+            with patch('remote_images.plan', side_effect=AssertionError('Must use archived receipt')):
+                verify_images(aws, json.loads(json.dumps(receipt)))
+
+    def test_archived_image_verification_rejects_changed_or_missing_objects(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(d)
+            fixture(root)
+            aws = FakeAWS()
+            receipt = ensure(aws, root=root)
+            key = next(iter(receipt['objects']))
+            original = dict(aws.objects[key])
+            for field, value in [('ContentType', 'image/png'), ('CacheControl', 'no-cache'),
+                                 ('ContentLength', original['ContentLength'] + 1), ('ChecksumSHA256', 'wrong')]:
+                with self.subTest(field=field):
+                    aws.objects[key] = dict(original, **{field: value})
+                    with self.assertRaises(ValueError):
+                        verify_images(aws, receipt)
+            aws.objects.pop(key)
+            with self.assertRaisesRegex(ValueError, 'Archived image missing or changed'):
+                verify_images(aws, receipt)
 
     def test_discovered_sources_upload_with_their_actual_image_content_type(self):
         with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
