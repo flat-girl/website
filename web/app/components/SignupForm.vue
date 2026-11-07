@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
     <h2 id="signup-heading">Get notified when we drop</h2>
     <p class="signup-intro">We will let you know as soon as they are available; can't guarantee your spot, but you'll be the first to know.</p>
     <p v-if="accepted" ref="success" tabindex="-1" role="status" class="signup-success">
-      Request received; we will be in touch.
+      Request received; we will reach out.<br>Might need to check your spam...
     </p>
     <form v-else :aria-busy="busy" novalidate @submit.prevent="submit">
       <label for="signup-email" class="signup-label">Email address</label>
