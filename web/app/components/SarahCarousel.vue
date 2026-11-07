@@ -1,14 +1,18 @@
 <script setup lang="ts">
 const availableImages = useImages()
 // Preparing an asset does not select it for this carousel.
+// Use the IDs from generated/images.json, not the original filenames.
 const images = [
   'flatgirl-shoota-couch04',
+  'product-front',
+  'product-back',
   'flatgirl-shoota-chair04',
+  'flatgirl-shoota-bed02',
   'flatgirl-shoota-rug02front',
   'flatgirl-shoota-rug02back',
-  'flatgirl-shoota-bed02',
   'flatgirl-shoota-chair03',
   'flatgirl-shoota-outside01',
+  'flatgirl-shoota-outside02'
 ].map(id => {
   const image = availableImages.find(image => image.id === id)
   if (!image) throw new Error(`Missing carousel image: ${id}`)

@@ -81,9 +81,13 @@ def prepare(root=ROOT, check=False, refresh=False):
     manifest_path = root / "images/manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() or not refresh else {"images": []}
     if refresh:
+        raw = root / "images/raw"
+        paths = sorted(raw.iterdir())
+        manifest["images"] = [asset for asset in manifest["images"]
+                              if (raw / asset["file"]).is_file()]
         files = {asset["file"] for asset in manifest["images"]}
         ids = {asset["id"] for asset in manifest["images"]}
-        for path in sorted((root / "images/raw").iterdir()):
+        for path in paths:
             if (not path.is_file() or path.is_symlink() or path.name.startswith('.') or
                     path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or path.name in files):
                 continue
@@ -110,7 +114,7 @@ def prepare(root=ROOT, check=False, refresh=False):
     for asset in manifest["images"]:
         source_path = root / "images/raw" / asset["file"]
         if not source_path.is_file():
-            raise ValueError(f"Missing raw image: {source_path}. Restore the supplied original.")
+            raise ValueError(f"Missing raw image: {source_path}. Restore it or run make images-prepare to accept its removal.")
         actual = source_info(source_path)
         if refresh:
             asset.update(actual)
@@ -166,6 +170,20 @@ def prepare(root=ROOT, check=False, refresh=False):
                     raise ValueError(f"Missing or corrupt staged image: {target}")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(processed / variant["key"], target)
+    if refresh and not check:
+        current_keys = {v["key"] for img in images for v in img["variants"]}
+        for key in previous.keys() - current_keys:
+            relative = Path(key)
+            if relative.is_absolute() or '..' in relative.parts or not relative.parts or relative.parts[0] != 'variants':
+                raise ValueError(f"Invalid generated image key: {key}")
+            for directory in (processed, public):
+                target = directory / relative
+                if not target.resolve().is_relative_to((directory / 'variants').resolve()):
+                    raise ValueError(f"Generated image escapes variants directory: {key}")
+                target.unlink(missing_ok=True)
+        if (any(img.get("recipe") == "favicon" for img in old["images"])
+                and not any(img["recipe"] == "favicon" for img in images)):
+            (public / "favicon.ico").unlink(missing_ok=True)
     print(f"Images: {rendered} rendered, {reused} reused; {len(images)} sources.")
     return metadata
 
@@ -174,7 +192,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Verify outputs without writes")
-    mode.add_argument("--refresh-manifest", action="store_true", help="Discover new raw images and accept intentional source replacements")
+    mode.add_argument("--refresh-manifest", action="store_true", help="Discover raw images and accept intentional source replacements and removals")
     args = parser.parse_args()
     try:
         prepare(check=args.check, refresh=args.refresh_manifest)
