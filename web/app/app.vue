@@ -36,7 +36,7 @@ main {
   width: calc(100% - 2rem);
   max-width: 40rem;
   margin-inline: auto;
-  padding-block: 1rem;
+  padding-block: 1rem calc(3.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 h1 {
