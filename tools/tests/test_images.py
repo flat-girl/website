@@ -27,6 +27,14 @@ class ImagesTest(unittest.TestCase):
                            favicon=dict(format='png', widths=[32, 64, 180]))
             (root / 'images/recipes.json').write_text(json.dumps(recipes))
             first = prepare(root)
+            ico = root / 'web/public/favicon.ico'
+            first_ico = ico.read_bytes()
+            ico_mtime = ico.stat().st_mtime_ns
+            with Image.open(ico) as icon:
+                self.assertEqual(icon.format, 'ICO')
+                self.assertEqual(icon.ico.sizes(), {(16, 16), (32, 32), (48, 48)})
+                for size in icon.ico.sizes():
+                    self.assertEqual(icon.ico.getimage(size).getpixel((0, 0)), (255, 0, 0, 128))
             variants = first['images'][0]['variants']
             self.assertEqual([v['width'] for v in variants], [32, 64, 180])
             self.assertEqual([v['key'] for v in variants], [e['key'] for e in plan(root)['entries']])
@@ -36,9 +44,23 @@ class ImagesTest(unittest.TestCase):
                     self.assertEqual(image.size, (variant['width'], variant['width']))
                     self.assertEqual(image.getpixel((0, 0))[3], 128)
             self.assertEqual(prepare(root), first)
+            self.assertEqual(ico.stat().st_mtime_ns, ico_mtime)
             prepare(root, check=True)
+            ico.write_bytes(b'corrupt')
+            with self.assertRaisesRegex(ValueError, 'favicon.ico'):
+                prepare(root, check=True)
+            self.assertEqual(ico.read_bytes(), b'corrupt')
+            prepare(root)
+            self.assertEqual(ico.read_bytes(), first_ico)
+            ico.unlink()
+            with self.assertRaisesRegex(ValueError, 'favicon.ico'):
+                prepare(root, check=True)
+            prepare(root)
             Image.new('RGBA', (200, 200), (0, 255, 0, 128)).save(source)
             changed = prepare(root, refresh=True)
+            self.assertNotEqual(ico.read_bytes(), first_ico)
+            with Image.open(ico) as icon:
+                self.assertEqual(icon.ico.getimage((32, 32)).getpixel((0, 0)), (0, 255, 0, 128))
             self.assertEqual(changed['images'][0]['recipe'], 'favicon')
             self.assertNotEqual(changed['images'][0]['variants'][0]['key'], variants[0]['key'])
             prepare(root, check=True)

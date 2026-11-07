@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import io
 import json
 import re
 import shutil
@@ -62,6 +63,20 @@ def save_variant(image, path, transform):
     temporary.replace(path)
 
 
+def prepare_favicon(image, path, check=False):
+    output = io.BytesIO()
+    image.save(output, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)], bitmap_format="bmp")
+    data = output.getvalue()
+    if path.is_file() and path.read_bytes() == data:
+        return
+    if check:
+        raise ValueError("Missing or stale favicon.ico. Run make images-prepare.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_bytes(data)
+    temporary.replace(path)
+
+
 def prepare(root=ROOT, check=False, refresh=False):
     manifest_path = root / "images/manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() or not refresh else {"images": []}
@@ -88,6 +103,8 @@ def prepare(root=ROOT, check=False, refresh=False):
     metadata_path = processed / "metadata.json"
     old = json.loads(metadata_path.read_text()) if metadata_path.exists() else {"images": []}
     previous = {v["key"]: v for img in old["images"] for v in img["variants"]}
+    if sum(asset.get("recipe") == "favicon" for asset in manifest["images"]) > 1:
+        raise ValueError("Only one favicon source can produce web/public/favicon.ico")
     images = []
     rendered = reused = 0
     for asset in manifest["images"]:
@@ -122,6 +139,8 @@ def prepare(root=ROOT, check=False, refresh=False):
                     rendered += 1
                 variants.append({"key": key, "width": width, "height": height,
                                  "sha256": sha256(output.read_bytes())})
+            if asset.get("recipe") == "favicon":
+                prepare_favicon(image, root / "web/public/favicon.ico", check=check)
             images.append({"id": asset["id"], "alt": asset["alt"],
                            "recipe": asset.get("recipe", "default"),
                            "variants": variants, "full": variants[-1],

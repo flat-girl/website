@@ -45,6 +45,12 @@ def main():
                     links.append(attrs)
         links = []
         IconLinks().feed(html)
+        ico = (public/'favicon.ico').read_bytes()
+        if ico != (ROOT/'web/public/favicon.ico').read_bytes():
+            raise ValueError('CDN build changed the committed favicon.ico')
+        if not any(link.get('rel') == 'icon' and link.get('type') == 'image/x-icon' and
+                   link.get('href') == '/favicon.ico?v=' + sha256(ico)[:12] for link in links):
+            raise ValueError('Missing versioned favicon.ico link')
         for size in (32, 64, 180):
             rel = 'apple-touch-icon' if size == 180 else 'icon'
             entry = next(e for e in expected['entries'] if e['source'].get('recipe') == 'favicon' and e['width'] == size)

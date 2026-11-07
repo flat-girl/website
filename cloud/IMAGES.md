@@ -12,6 +12,13 @@ IDs and default alt text, with numeric suffixes for ID collisions. Review the
 generated alt text and manifest diff before committing. Missing tracked files
 remain an error; preparation never silently removes them from the manifest.
 
+The source with `recipe: "favicon"` also regenerates the committed
+`web/public/favicon.ico` with 16, 32, and 48px sizes. Unchanged ICO bytes are left
+untouched; `images:check` detects a missing or stale ICO. Commit the ICO alongside
+source manifest changes. Nuxt derives its icon URL version from the ICO bytes at
+startup/build time, so no manual version edit is needed. CDN builds use the
+committed ICO without requiring raw images.
+
 ```sh
 make images-prepare
 make sources-import PROFILE=flat-girl DRY_RUN=1

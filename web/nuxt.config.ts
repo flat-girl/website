@@ -1,4 +1,10 @@
 import { env } from 'node:process'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+
+const faviconVersion = createHash('sha256')
+  .update(readFileSync(new URL('./public/favicon.ico', import.meta.url)))
+  .digest('hex').slice(0, 12)
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-11-05',
@@ -23,6 +29,12 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       title: 'Boring Flat Girl',
+      link: [{
+        rel: 'icon',
+        type: 'image/x-icon',
+        sizes: '16x16 32x32 48x48',
+        href: `/favicon.ico?v=${faviconVersion}`,
+      }],
       meta: env.FLAT_GIRL_NOINDEX === 'true' ? [{ name: 'robots', content: 'noindex, nofollow, noarchive' }] : [],
     },
   },

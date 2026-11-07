@@ -48,9 +48,9 @@ async function verify() {
         verificationMessage.value = ''
       },
       'error-callback': () => { if (active()) verificationError() },
-      'expired-callback': () => { if (active()) verificationError('Verification expired. Please verify again.') },
+      'expired-callback': () => { if (active()) verificationError('Verification expired, if you could do it again.') },
       'timeout-callback': () => { if (active()) verificationError() },
-      'before-interactive-callback': () => { if (active()) verificationMessage.value = 'Complete the verification below.' },
+      'before-interactive-callback': () => { if (active()) verificationMessage.value = 'Verify you\'re not a bot.' },
       'after-interactive-callback': () => {},
     })
     if (widgetId === undefined) throw new Error('Verification unavailable')
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
       <div class="signup-verification">
         <div ref="challenge" />
         <p role="status">{{ verificationMessage }}</p>
-        <button v-if="verificationFailed" type="button" :disabled="busy" class="signup-retry" @click="verify">Retry verification</button>
+        <button v-if="verificationFailed" type="button" :disabled="busy" class="signup-retry" @click="verify">I am not a bot</button>
       </div>
       <p id="signup-message" role="alert" class="signup-error">{{ message }}</p>
       <button type="submit" :disabled="!mounted || busy || !token" class="signup-submit">
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .signup {
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   margin-inline: auto;
   max-width: 28rem;
 }
