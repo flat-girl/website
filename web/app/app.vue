@@ -29,6 +29,9 @@ useHead({
     </div>
     <SignupForm />
   </main>
+  <footer>
+    <a href="https://linktree.polis.tv">A project by Polis</a>
+  </footer>
 </template>
 
 <style scoped>
@@ -49,11 +52,16 @@ h1 {
 
 .product-details {
   max-width: 28rem;
-  margin: 2.25rem auto 0;
+  margin: 2.5rem auto 0;
 }
 
 .product-details p + p {
   margin-top: 1rem;
+}
+
+footer {
+  padding: 0 1.5rem calc(3rem + env(safe-area-inset-bottom, 0px));
+  text-align: center;
 }
 
 @media (min-width: 48rem) {
