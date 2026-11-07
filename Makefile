@@ -29,7 +29,7 @@ help:
 	  '  make cloud-deploy PROFILE=flat-girl STACK=certificates' \
 	  '  make beta-auth PROFILE=flat-girl' \
 	  '  make beta-enabled PROFILE=flat-girl ENABLED=false' \
-	  '  make images-prepare  (discover raw images, refresh manifest and render locally)' \
+	  '  make images-prepare  (sync raw additions/removals, refresh manifest and render locally)' \
 	  '  make image-crop  (overwrite raw Sarah icon using constants in tools/crop_icon.py)' \
 	  '  make sources-import PROFILE=flat-girl DRY_RUN=1' \
 	  '  make sources-pull PROFILE=flat-girl' \

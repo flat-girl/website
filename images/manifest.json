@@ -1,24 +1,6 @@
 {
   "images": [
     {
-      "id": "sarah-front",
-      "file": "sarah_front_no_outline_v3.9.2.png",
-      "alt": "Sarah, front view",
-      "sha256": "40ef36889854d664c4fffd18572981420fb2bca015cdba4066643fdc23433c8f",
-      "bytes": 3507039,
-      "width": 1696,
-      "height": 2528
-    },
-    {
-      "id": "sarah-back",
-      "file": "sarah_back_no_outline_v3.2.2.png",
-      "alt": "Sarah, back view",
-      "sha256": "7b5d9204fcfde96843ad71bcda337f21b3b98702c0c6c3fc3a766232f1d18470",
-      "bytes": 2527557,
-      "width": 1696,
-      "height": 2528
-    },
-    {
       "id": "flatgirl-shoota-bed02",
       "file": "FlatGirl_ShootA_Bed02.jpg",
       "alt": "FlatGirl ShootA Bed02",
@@ -90,6 +72,51 @@
       "bytes": 191985,
       "width": 380,
       "height": 380
+    },
+    {
+      "id": "product-back",
+      "file": "Product_Back.jpg",
+      "alt": "Product Back",
+      "sha256": "36a37bf27438ba5b96aad5491034bf239c1160d87fa11183634cec244751a30b",
+      "bytes": 736871,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "product-front",
+      "file": "Product_Front.jpg",
+      "alt": "Product Front",
+      "sha256": "fa1e3078fbfd69570518d46bb271311555b5142979176c35173d3249b3f27ab3",
+      "bytes": 726678,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "product-back-2",
+      "file": "product_back.jpg",
+      "alt": "product back",
+      "sha256": "36a37bf27438ba5b96aad5491034bf239c1160d87fa11183634cec244751a30b",
+      "bytes": 736871,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "product-front-2",
+      "file": "product_front.jpg",
+      "alt": "product front",
+      "sha256": "fa1e3078fbfd69570518d46bb271311555b5142979176c35173d3249b3f27ab3",
+      "bytes": 726678,
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "id": "flatgirl-shoota-outside02",
+      "file": "FlatGirl_ShootA_Outside02.jpg",
+      "alt": "FlatGirl ShootA Outside02",
+      "sha256": "cb7cb6de77d78cb1fb6ab1be03d5543cadc0063f680682031022c1b1658efce9",
+      "bytes": 1787557,
+      "width": 1080,
+      "height": 1440
     }
   ]
 }

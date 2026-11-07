@@ -67,6 +67,13 @@ class ImagesTest(unittest.TestCase):
             for dimensions in [(100, 100), (200, 250)]:
                 with self.assertRaisesRegex(ValueError, 'square'):
                     image_transforms(dict(asset, width=dimensions[0], height=dimensions[1]), recipes)
+            source.unlink()
+            self.assertEqual(prepare(root, refresh=True), {'images': []})
+            self.assertFalse(ico.exists())
+            for variant in changed['images'][0]['variants']:
+                for directory in ['images/processed', 'web/public']:
+                    self.assertFalse((root / directory / variant['key']).exists())
+            prepare(root, check=True)
 
     def test_refresh_discovers_sources_preserves_editorial_fields_and_reuses_outputs(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
@@ -82,7 +89,7 @@ class ImagesTest(unittest.TestCase):
                 Image.new('RGB', (12, 16)).save(raw / name)
             (raw / '.DS_Store').write_bytes(b'not an image')
             (raw / 'notes.txt').write_text('ignore')
-            prepare(root, refresh=True)
+            first = prepare(root, refresh=True)
             items = json.loads(manifest.read_text())['images']
             self.assertEqual(items[0], existing)
             self.assertEqual([item['id'] for item in items], ['new-photo', 'new-photo-2', 'new-photo-3', 'other'])
@@ -95,9 +102,24 @@ class ImagesTest(unittest.TestCase):
             self.assertEqual(times, {path: path.stat().st_mtime_ns for path in paths})
             prepare(root, check=True)
             (raw / 'existing.png').unlink()
-            with self.assertRaisesRegex(ValueError, 'Missing raw'):
-                prepare(root, refresh=True)
+            for check in [False, True]:
+                with self.assertRaisesRegex(ValueError, 'Missing raw'):
+                    prepare(root, check=check)
             self.assertEqual(json.loads(manifest.read_text())['images'], items)
+            refreshed = prepare(root, refresh=True)
+            self.assertEqual(json.loads(manifest.read_text())['images'], items[1:])
+            self.assertEqual(refreshed['images'], first['images'][1:])
+            self.assertEqual(json.loads((root / 'web/app/generated/images.json').read_text()), refreshed)
+            self.assertEqual(json.loads((root / 'images/processed/metadata.json').read_text()), refreshed)
+            for variant in first['images'][0]['variants']:
+                for directory in ['images/processed', 'web/public']:
+                    self.assertFalse((root / directory / variant['key']).exists())
+            for item in refreshed['images']:
+                for variant in item['variants']:
+                    output = root / 'images/processed' / variant['key']
+                    self.assertEqual(output.stat().st_mtime_ns, times[output])
+            self.assertEqual(prepare(root, refresh=True), refreshed)
+            prepare(root, check=True)
 
     def test_refresh_can_create_manifest_but_invalid_image_does_not_change_it(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
@@ -110,7 +132,16 @@ class ImagesTest(unittest.TestCase):
             manifest = root / 'images/manifest.json'
             before = manifest.read_bytes()
             self.assertEqual(json.loads(before)['images'][0]['file'], 'photo.jpg')
+            generated = root / 'web/app/generated/images.json'
+            metadata_before = generated.read_bytes()
+            (raw / 'photo.jpg').unlink()
             (raw / 'broken.png').write_bytes(b'invalid')
+            with self.assertRaises(OSError):
+                prepare(root, refresh=True)
+            self.assertEqual(manifest.read_bytes(), before)
+            self.assertEqual(generated.read_bytes(), metadata_before)
+            (raw / 'broken.png').unlink()
+            raw.rmdir()
             with self.assertRaises(OSError):
                 prepare(root, refresh=True)
             self.assertEqual(manifest.read_bytes(), before)

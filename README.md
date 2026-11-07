@@ -130,7 +130,7 @@ links still open the original images.
 
 Output URLs fingerprint the source, transform, Pillow/libwebp versions, and
 renderer revision. Unchanged runs reuse validated outputs. Missing/corrupt local
-outputs are regenerated. After adding or replacing files in `images/raw/`, run:
+outputs are regenerated. After adding, replacing, or removing files in `images/raw/`, run:
 
 ```sh
 make images-prepare
@@ -139,10 +139,13 @@ make images-prepare
 This discovers new PNG/JPEG/WebP files, adds manifest entries with filename-based
 IDs and default alt text, refreshes source checksums/dimensions, and prepares variants.
 Existing IDs, alt text and order are preserved; new files append in filename order.
+Deleted sources are removed from the manifest and generated metadata, and obsolete
+local variants are removed from `images/processed/` and `web/public/variants/`.
+Ordinary builds and checks still reject missing sources until this refresh is run.
 No manual manifest entry or AWS profile is needed. Prepared assets are available
 to the app but do not automatically appear on the page: the Sarah carousel explicitly
-selects couch04, chair04, rug02front, rug02back, bed02, chair03, and outside01
-from ShootA, in that order. Review the generated alt text
+selects image IDs in `web/app/components/SarahCarousel.vue`. Remove any deleted
+images from that selection too. Review the generated alt text
 and commit the manifest diff; never commit raw/processed image directories.
 Keep old published variants for rollback. [Shared image commands](cloud/IMAGES.md)
 now provide conditional CDN uploads and verified URL receipts.
