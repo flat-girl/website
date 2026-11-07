@@ -11,8 +11,9 @@
     "test:images": "uv run --locked --project ../tools python -m unittest discover -s ../tools/tests",
     "test:cdn": "uv run --locked --project ../tools python ../tools/check_cdn.py --browser",
     "test:signup": "uv run --locked --project ../tools python ../tools/check_signup.py",
+    "test:signup:dev": "playwright test --config playwright.dev.config.ts",
     "predev": "npm run images:prepare",
-    "dev": "nuxt dev --host 127.0.0.1",
+    "dev": "nuxt dev --host 0.0.0.0",
     "pregenerate": "npm run images:prepare",
     "generate": "nuxt generate",
     "preview": "python3 -m http.server 3000 --bind 127.0.0.1 --directory .output/public",
@@ -28,9 +29,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "@tailwindcss/vite": "4.3.4",
     "@types/node": "24.19.2",
-    "tailwindcss": "4.3.4",
     "typescript": "6.0.3",
     "vue-tsc": "3.3.14"
   }

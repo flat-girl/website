@@ -58,8 +58,7 @@ def validate_public(value, env):
 def build_environment(environ, settings):
     # Nuxt's public overrides must not silently replace the checked build settings.
     cleaned = {k:v for k,v in environ.items() if not k.startswith(('FLAT_GIRL_SIGNUP_', 'FLAT_GIRL_TURNSTILE_', 'NUXT_PUBLIC_SIGNUP_', 'NUXT_PUBLIC_TURNSTILE_'))}
-    cleaned.update(FLAT_GIRL_SIGNUP_ENABLED=str(settings['enabled']).lower(), FLAT_GIRL_SIGNUP_ENDPOINT=settings['endpoint'],
-                   FLAT_GIRL_TURNSTILE_SITE_KEY=settings['siteKey'], FLAT_GIRL_SIGNUP_ENVIRONMENT=settings['environment'])
+    cleaned.update(FLAT_GIRL_SIGNUP_ENDPOINT=settings['endpoint'], FLAT_GIRL_TURNSTILE_SITE_KEY=settings['siteKey'])
     return cleaned
 
 def set_secrets(aws, selected):

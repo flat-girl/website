@@ -172,7 +172,7 @@ make signup-status PROFILE=flat-girl SITE_ENV=production
 ```
 
 This is a CloudFormation update and takes time; it is not an instantaneous switch.
-Publish a disabled site build afterward if visitors should see the disabled form.
+The form remains visible; failed submissions show the normal retry message.
 For a single-key rotation:
 
 ```sh

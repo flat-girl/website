@@ -80,6 +80,16 @@
       "bytes": 1794553,
       "width": 1080,
       "height": 1440
+    },
+    {
+      "id": "sarah-icon",
+      "recipe": "favicon",
+      "file": "sarah-icon.png",
+      "alt": "Sarah's face, front view",
+      "sha256": "cd0aa8986df4719bfc8fe24e30479280f807318f02d4cea41d74f31d17a297c6",
+      "bytes": 191985,
+      "width": 380,
+      "height": 380
     }
   ]
 }

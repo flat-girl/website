@@ -37,6 +37,26 @@ def main():
         if (root/'images/raw').exists() or (root/'images/processed').exists() or (public/'variants').exists():raise ValueError('CDN checkout contains local image copies')
         html=(public/'index.html').read_text()
         if 'https://fixture.cloudfront.net/variants/' not in html or 'noindex' not in html:raise ValueError('CDN origin/noindex missing from HTML')
+        from html.parser import HTMLParser
+        class IconLinks(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'link' and attrs.get('rel') in ('icon', 'apple-touch-icon'):
+                    links.append(attrs)
+        links = []
+        IconLinks().feed(html)
+        ico = (public/'favicon.ico').read_bytes()
+        if ico != (ROOT/'web/public/favicon.ico').read_bytes():
+            raise ValueError('CDN build changed the committed favicon.ico')
+        if not any(link.get('rel') == 'icon' and link.get('type') == 'image/x-icon' and
+                   link.get('href') == '/favicon.ico?v=' + sha256(ico)[:12] for link in links):
+            raise ValueError('Missing versioned favicon.ico link')
+        for size in (32, 64, 180):
+            rel = 'apple-touch-icon' if size == 180 else 'icon'
+            entry = next(e for e in expected['entries'] if e['source'].get('recipe') == 'favicon' and e['width'] == size)
+            if not any(link.get('rel') == rel and link.get('sizes') == f'{size}x{size}' and
+                       link.get('href') == 'https://fixture.cloudfront.net/' + entry['key'] for link in links):
+                raise ValueError(f'Missing CDN favicon link: {size}')
         # This scaffold has no application payload data; timestamps alone vary between builds.
         payload=json.loads((public/'_payload.json').read_text())
         if {} not in payload:raise ValueError('Review changed Nuxt payload semantics before ordered publication')

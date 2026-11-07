@@ -12,6 +12,13 @@ IDs and default alt text, with numeric suffixes for ID collisions. Review the
 generated alt text and manifest diff before committing. Missing tracked files
 remain an error; preparation never silently removes them from the manifest.
 
+The source with `recipe: "favicon"` also regenerates the committed
+`web/public/favicon.ico` with 16, 32, and 48px sizes. Unchanged ICO bytes are left
+untouched; `images:check` detects a missing or stale ICO. Commit the ICO alongside
+source manifest changes. Nuxt derives its icon URL version from the ICO bytes at
+startup/build time, so no manual version edit is needed. CDN builds use the
+committed ICO without requiring raw images.
+
 ```sh
 make images-prepare
 make sources-import PROFILE=flat-girl DRY_RUN=1
@@ -52,7 +59,9 @@ Use `make site-build` for a deployable artifact; it verifies remote images and
 cleans build output first. A direct Nuxt build is a preview, not an archived release.
 Receipts, originals, and processed-cache metadata are never published with the site.
 Run `make images-prepare` for raw-file additions or replacements. Review and commit
-the manifest changes, then rebuild/publish the site to display the new images.
+the manifest changes. Preparation adds assets to the catalog, not to the page.
+`SarahCarousel.vue` explicitly selects `sarah-front` and `sarah-back`; to display
+other prepared assets, select them in the relevant page/component and rebuild/publish.
 
 Keep historical sources and variants. Recipe/renderer changes create new URLs;
 old pages and rollback artifacts keep using old keys. `releases/` in the private

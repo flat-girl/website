@@ -2,19 +2,14 @@ import { expect } from '@playwright/test'
 import { test, installImageFixture } from './image-fixture'
 import { signupEndpoint, widgetScript } from './signup-fixture'
 
-const enabled = process.env.FLAT_GIRL_TEST_SIGNUP === 'true'
-test('disabled signup makes no provider requests', async ({ page }) => {
-  test.skip(enabled, 'Disabled build only')
-  const providers: string[] = []
-  page.on('request', request => { if (/turnstile|brevo|\/subscribe/.test(request.url())) providers.push(request.url()) })
+test('signup form is always visible', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByText("Notifications aren't available yet. Check back soon.")).toBeVisible()
-  await expect(page.getByLabel('Email address')).toHaveCount(0)
-  expect(providers).toEqual([])
+  await expect(page.getByLabel('Email address')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Notify me when it drops', exact: true })).toBeVisible()
 })
 
-test.describe('enabled signup', () => {
-  test.skip(!enabled, 'Run npm run test:signup for the isolated enabled build')
+test.describe('signup submission', () => {
+  test.skip(process.env.FLAT_GIRL_TEST_SIGNUP !== 'true', 'Run npm run test:signup for the fixture API endpoint')
   for (const width of [375, 1280]) {
     test(`simple accessible signup at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 })
@@ -33,7 +28,8 @@ test.describe('enabled signup', () => {
         await route.fulfill({ json: { accepted: true } })
       })
       await page.goto('/')
-      await expect(page.getByText('Test signup — this form uses our test list.')).toBeVisible()
+      await expect(page.getByText(/Local preview|Test signup/)).toHaveCount(0)
+      await expect(page.locator('#signup-privacy')).toBeVisible()
       await expect(page.getByRole('checkbox')).toHaveCount(0)
       await expect(page.getByText(/Submit your email to get/)).toBeVisible()
       await page.getByLabel('Email address').fill('reader@example.com')
@@ -129,11 +125,11 @@ test.describe('enabled signup', () => {
     await expect(page.getByRole('button', { name: 'Notify me when it drops', exact: true })).toBeEnabled()
   })
 
-  test('without JavaScript the form explains the requirement and cannot submit', async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false })
+  test('without JavaScript the form explains the requirement and cannot submit', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ baseURL, javaScriptEnabled: false })
     await installImageFixture(context)
     const page = await context.newPage()
-    await page.goto('http://127.0.0.1:3000/')
+    await page.goto('/')
     await expect(page.getByText('Please enable JavaScript to sign up for the notification.')).toBeVisible()
     await expect(page.getByLabel('Email address')).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Notify me when it drops', exact: true })).toBeDisabled()

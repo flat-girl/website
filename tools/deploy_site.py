@@ -79,7 +79,11 @@ def verify_images(aws,receipt):
     if receipt.get('account')!=aws.p['account'] or receipt.get('bucket')!=out['VariantsBucketName'] or receipt.get('origin')!=out['ImageBaseUrl']:
         raise ValueError('Archived image destination differs from live infrastructure')
     for key,obj in receipt['objects'].items():
-        entry=dict(key=key,**{k:obj[k] for k in ('width','height','fingerprint')})
+        # Receipts omit transforms; the archived key preserves the output format.
+        # Use it instead of current recipes so older releases remain publishable.
+        image_format=Path(key).suffix.removeprefix('.')
+        if image_format not in ('webp','png'):raise ValueError(f'Unsupported archived image format: {key}')
+        entry=dict(key=key,transform={'format':image_format},**{k:obj[k] for k in ('width','height','fingerprint')})
         if remote_variant(aws,out['VariantsBucketName'],entry)!=obj:raise ValueError(f'Archived image missing or changed: {key}')
 
 def build(aws,env):
@@ -246,7 +250,8 @@ def verify(aws,env,directory):
         if manifest['noindex'] and 'noindex' not in headers.get('X-Robots-Tag',''):raise ValueError(f'Missing noindex header: {path}')
     for key,obj in manifest['images']['objects'].items():
         status,headers,data=request(manifest['imageOrigin']+'/'+key)
-        if status!=200 or sha256(data)!=obj['sha256'] or headers.get_content_type()!='image/webp' or headers.get('Cache-Control')!=IMMUTABLE:
+        content_type = 'image/png' if key.endswith('.png') else 'image/webp'
+        if status!=200 or sha256(data)!=obj['sha256'] or headers.get_content_type()!=content_type or headers.get('Cache-Control')!=IMMUTABLE:
             raise ValueError(f'Image CDN verification failed: {key}')
     probes=[(origin+'/offer?utm_source=check&x=1&x=2',302,origin+'/?utm_source=check&x=1&x=2'),
             ('https://'+out['DistributionDomainName']+'/',301,origin+'/'),(origin+'/index.html',301,origin+'/')]

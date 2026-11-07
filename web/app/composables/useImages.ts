@@ -8,7 +8,7 @@ export function useImages(origin = ('origin' in metadata ? String(metadata.origi
     alt: image.alt,
     src: url(image.display[0]!.key),
     srcset: image.display.map(v => `${url(v.key)} ${v.width}w`).join(', '),
-    sizes: '(max-width: 512px) calc(100vw - 32px), 480px',
+    sizes: 'min(24rem, calc(100vw - 2rem))',
     width: image.full.width,
     height: image.full.height,
     full: url(image.full.key),
