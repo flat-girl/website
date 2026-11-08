@@ -47,3 +47,7 @@ asset-upload privileges. The shared certificate is retained on removal.
 
 [Meta CAPI](META.md) adds environment-specific SQS delivery, durable DynamoDB event records, and Lambda@Edge tracking.
 It is local-only until the operator completes setup and rollout.
+
+The independent [admin dashboard](ADMIN.md) adds an admin stack with a private
+static site, authenticated metrics API, and writable aggregate cache. Existing
+source tables and queues remain read-only to the admin runtime.
