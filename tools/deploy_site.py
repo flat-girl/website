@@ -29,7 +29,7 @@ MUTABLE='public, max-age=0, s-maxage=60, must-revalidate'
 ROOT_FILES={'index.html','200.html','404.html','_payload.json','robots.txt','build.json','favicon.ico','favicon.svg','sitemap.xml'}
 TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8',
        '.json':'application/json','.txt':'text/plain; charset=utf-8','.xml':'application/xml','.svg':'image/svg+xml',
-       '.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2'}
+       '.ico':'image/x-icon','.png':'image/png','.woff':'font/woff','.woff2':'font/woff2'}
 
 def classify(key):
     parts=Path(key).parts

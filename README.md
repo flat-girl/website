@@ -14,6 +14,13 @@ dedicated beta dataset. See the [plan](docs/milestone-4-plan.md) and
 See the [roadmap](docs/IMPLEMENTATION-PLAN.md) and
 [milestone 1 plan](docs/milestone-1-plan.md).
 
+## Admin dashboard
+
+The separate `admin/` Nuxt/Tailwind dashboard shows recorded signups, views, event
+rates, daily/weekly patterns, and DLQ health. It uses Basic Auth and a persistent
+DynamoDB rollup cache. Deployed at <https://admin.flatgirl.net>; see the
+[admin runbook](cloud/ADMIN.md) for development, checks, and isolated deployment.
+
 ## Run locally
 
 Requires Node 24 (`.nvmrc`), uv, and Python 3.14 (managed by uv if needed).

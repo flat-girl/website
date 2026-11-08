@@ -1,3 +1,4 @@
+import { Admin } from '../lib/admin-stack.js'
 import { App } from 'aws-cdk-lib'
 import { readFileSync } from 'node:fs'
 import { config } from '../lib/config.js'
@@ -15,3 +16,5 @@ new Site(app,project,'production',certificates.certificate)
 const signup=signupConfig(JSON.parse(readFileSync(new URL('../../signup.json', import.meta.url),'utf8')))
 new Signup(app,project,'beta',signup)
 new Signup(app,project,'production',signup)
+
+new Admin(app, project)

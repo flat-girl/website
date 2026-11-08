@@ -1,3 +1,4 @@
+import { adminAccess } from './admin-access.js'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import type { Construct } from 'constructs'
 import { RemovalPolicy } from 'aws-cdk-lib'
@@ -40,7 +41,7 @@ export class Access extends Base {
     // CloudFront policy/OAC creation and lifecycle APIs cannot all be restricted by project tags.
     execution.addToPolicy(statement(['cloudfront:*'],[`arn:aws:cloudfront::${p.account}:*`]))
     execution.addToPolicy(statement(['cloudfront:Create*','cloudfront:List*'],['*']))
-    const discovery=statement(['cloudformation:DescribeStacks','cloudformation:GetTemplate','cloudformation:DescribeStackEvents'],stackArns)
+    const discovery=statement(['cloudformation:DescribeStacks','cloudformation:GetTemplate','cloudformation:DescribeStackEvents'],stackArns.filter(arn=>!arn.includes(':stack/FlatGirlAdmin/')))
     operator.addToPolicy(statement(['route53:GetHostedZone','route53:ListResourceRecordSets'],[`arn:aws:route53:::hostedzone/${p.hostedZoneId}`]))
     operator.addToPolicy(statement(['route53:ListHostedZonesByName','cloudfront:ListDistributions','acm:ListCertificates'],['*']))
     operator.addToPolicy(statement(['cloudfront:GetDistribution','cloudfront:GetDistributionConfig'],[`arn:aws:cloudfront::${p.account}:distribution/*`]))
@@ -161,6 +162,8 @@ export class Access extends Base {
       `arn:aws:iam::${p.account}:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway`
     ],{StringEquals:{'iam:AWSServiceName':'ops.apigateway.amazonaws.com'}}))
     operator.addToPolicy(statement(['cloudwatch:DescribeAlarms'],['*']))
+    const adminPublisher=adminAccess(this,p,operator,execution,trust)
+    this.output('AdminPublisherRoleArn',adminPublisher.roleArn)
     this.output('OperatorRoleArn',operator.roleArn);this.output('ExecutionRoleArn',execution.roleArn)
   }
 }

@@ -47,6 +47,7 @@ help:
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
 	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
 	  'Meta: make meta-secrets/meta-config/meta-status/meta-test; see cloud/META.md.' \
+	  'Admin: make admin-build/admin-auth/admin-preflight/admin-publish/admin-verify/admin-rollback; see cloud/ADMIN.md.' \
 	  'See cloud/ACCESS.md and cloud/DEPLOYMENT.md for rollout order.'
 
 cloud-preflight:
@@ -121,3 +122,22 @@ meta-status:
 
 meta-test:
 	$(no_dry_run)$(PYTHON) tools/meta.py test $(profile) $(site_env) --event $(call required,EVENT)
+
+.PHONY: admin-build admin-auth admin-preflight admin-publish admin-verify admin-rollback
+admin-build:
+	$(PYTHON) tools/admin.py build
+
+admin-auth:
+	$(no_dry_run)$(PYTHON) tools/admin.py auth $(profile)
+
+admin-preflight:
+	$(PYTHON) tools/admin.py preflight $(profile)
+
+admin-publish:
+	$(PYTHON) tools/admin.py publish $(profile) $(release) $(dry_run)
+
+admin-verify:
+	$(PYTHON) tools/admin.py verify $(profile) $(release) $(if $(filter 1,$(ROLLUPS)),--rollups)
+
+admin-rollback:
+	$(PYTHON) tools/admin.py rollback $(profile) --release $(call required,RELEASE) $(dry_run)

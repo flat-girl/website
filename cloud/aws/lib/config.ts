@@ -10,6 +10,6 @@ export function config(value: any): Config {
     throw new Error('Invalid Flat Girl configuration; supply account, hosted zone, non-root operator ARN and explicit flags.')
   return value
 }
-export const stacks = { access: 'FlatGirlAccess', certificates: 'FlatGirlCertificates', images: 'FlatGirlImages', beta: 'FlatGirlBetaSite', production: 'FlatGirlProductionSite', 'signup-beta': 'FlatGirlBetaSignup', 'signup-production': 'FlatGirlProductionSignup' }
+export const stacks = { admin: 'FlatGirlAdmin', access: 'FlatGirlAccess', certificates: 'FlatGirlCertificates', images: 'FlatGirlImages', beta: 'FlatGirlBetaSite', production: 'FlatGirlProductionSite', 'signup-beta': 'FlatGirlBetaSignup', 'signup-production': 'FlatGirlProductionSignup' }
 export const bucketName = (p: Config, kind: string) => `flat-girl-${kind}-${p.account}-${p.region}`
 export const roleArn = (p: Config, name: string) => `arn:aws:iam::${p.account}:role/flat-girl-${name}`
