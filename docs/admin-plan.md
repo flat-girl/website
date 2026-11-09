@@ -1,6 +1,7 @@
 # Admin dashboard plan
 
 Status: deployed November 8, 2026 at `https://admin.flatgirl.net`.
+The incremental-refresh correction below was deployed November 8, 2026.
 Latest authenticated live verification passed at 3:18 PM CST, including unique
 views, the launch cutoff, and Sarah’s icon. See `cloud/ADMIN.md` for operations.
 
@@ -356,3 +357,43 @@ since the earlier independent read as new events arrived. No fake signups were
 submitted, and no source-data writes were performed. Test/demo records exist
 only in local fixtures; live verification writes only the admin aggregate cache.
 Deployment and verification are complete.
+
+## Incremental refresh correction — November 8, 2026 (deployed)
+
+The user's immutable-history requirement supersedes section 3's full-scan,
+late-archival reconciliation, per-generation secret, and no-index decisions.
+The previous 60-second expiry rebuilt all source history and exposed every scan
+page as another dashboard update section.
+
+Schema 3 now retains sealed hourly chunks and refreshes from the last published
+open UTC hour through the refresh start time. A rollover finalizes that previously
+partial hour once and catches up any missed hours. A projected `environment-time`
+GSI on each existing event table makes this a true bounded Query, not a filtered
+Scan. The index uses existing attributes, so source event writes need no changes.
+The two additive source indexes are the intended exception to section 4's
+original prohibition on event-table infrastructure changes.
+
+History and manifests have no TTL. Disposable live snapshots retain seven-day
+TTL; their expiration triggers only live-interval recovery. Durable jobs resume
+instead of expiring, and revisions hide staged historical chunks until publication.
+A private archive-level HMAC secret preserves cross-refresh distinct unions and
+is stripped from API responses along with all fingerprints. Previously sealed
+source periods are intentionally never revisited, including for delayed archival.
+
+Validation: 53 backend/infrastructure tests, TypeScript checking, and example/live
+configuration synthesis pass. Regression coverage includes a one-hour absence,
+same-hour replacement, eight-day absence with expired live cache, cross-refresh
+visitor deduplication, hidden staged history, lost checkpoint replies, and resumed
+snapshots older than one hour. Frontend behavior is unchanged. See cloud/ADMIN.md
+for deployment order and the one-time schema 3 cache initialization.
+
+Deployment completed November 8, 2026. The user explicitly approved the two time
+indexes, scoped read-permission change, and metrics backend update. Both indexes
+are ACTIVE. Read-only verification at 9:07 PM CST confirmed exact deployed source,
+policy, and resource-template matches for the four approved stacks, plus public
+HTTP 200, signup preflight HTTP 204, and admin API HTTP 401 without credentials.
+Receipts: `.deploy/admin/incremental-indexes.json` and
+`.deploy/admin/incremental-verification-first.json`. The local rollup verifier was
+updated for schema 3; all seven admin tooling tests pass. Initial live cache reads
+still showed schema 2 pending the next authenticated refresh; authenticated
+incremental refresh is not claimed by these deployment checks.
