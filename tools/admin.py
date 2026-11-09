@@ -160,7 +160,7 @@ def verify_rollup(origin, authorization, environment):
                 raise ValueError('Live aggregate totals do not match hourly buckets')
             unique = data.get('totalUniqueViews')
             unknown = data.get('unidentifiedViews')
-            if (data.get('schema') != 2 or not isinstance(unique, int) or not isinstance(unknown, int)
+            if (data.get('schema') != 3 or not isinstance(unique, int) or not isinstance(unknown, int)
                     or not 0 <= unique <= data['totalViews'] - unknown or unknown < 0
                     or any(len(h) != 5 or not 0 <= h[3] <= h[1] - h[4] or h[4] < 0 for h in hours)
                     or sum(h[4] for h in hours) != unknown

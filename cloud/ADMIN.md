@@ -59,14 +59,17 @@ uniques, retained in total views, and disclosed. This is not a matched conversio
 funnel. The rate uses the selected view-counting basis.
 
 The only writable table is `flat-girl-admin-cache` (plus execution-log writes).
-Schema 2 stores generation manifests, hourly counts and keyed fingerprints
-partitioned by UTC date and hash prefix, scan progress, DLQ attributes, and one
-global mutex. Raw IPs/user-agents are used only in Lambda memory. Fingerprints use
-HMAC-SHA256 with a random secret per generation; the secret exists in resumable
-job state and is deleted when the generation completes. The API returns only
-numeric aggregates, never fingerprints or the secret. Schema changes rebuild
-old caches. TTL is seven days for disposable cache data, not a source-history
-retention limit. Source records remain intact.
+Schema 3 stores immutable completed-hour counts and keyed fingerprints, a replaceable
+current-hour snapshot, durable query progress, DLQ attributes, and one global
+mutex. History is partitioned by environment/archive, UTC hour, and fingerprint
+prefix. Raw IPs/user-agents are used only in Lambda memory. HMAC-SHA256 uses a
+private random secret retained with the archive so visitors remain deduplicated
+across refreshes. The API returns only numeric aggregates, never fingerprints or
+the secret. Completed history, its manifest, and unfinished jobs do not expire;
+seven-day TTL applies only to disposable live snapshots and DLQ results. Losing
+an expired live snapshot does not discard historical rollups. Source records
+remain intact. A schema change or missing historical cache requires a one-time
+rebuild; ordinary refreshes never rebuild sealed history.
 
 `GET /api/metrics?environment=production` reads complete persisted data. It does
 not scan DynamoDB sources or call SQS. `POST /api/rollups/ensure` with
@@ -74,20 +77,30 @@ not scan DynamoDB sources or call SQS. `POST /api/rollups/ensure` with
 requires Basic Auth, JSON, and Origin `https://admin.flatgirl.net`. The browser
 supplies Origin and reuses HTTP authentication. Never pass AWS resource names.
 
-A source page is limited to 50 items. Each invocation atomically commits changed
-date/hash chunks and the next cursor under a 45-second lease. API calls have a
-bounded execution deadline; a crashed request recovers after lease expiry. The
-same page cannot be counted twice following a lost transaction response. The
-latest complete generation remains readable while a replacement is built. An
-abandoned scan older than one hour restarts. The lease is released between calls;
-no tab owns it while viewing. No persistent browser sessions or token exchange.
+A source query page is limited to 50 items. Each invocation atomically commits
+changed hour/hash chunks and the next cursor under a 45-second lease. API calls
+have a bounded execution deadline; a crashed request recovers after lease expiry.
+The same page cannot be counted twice following a lost transaction response.
+Newly completed hours are staged under the next revision and remain invisible
+until the manifest publishes. The previous complete result stays readable during
+refresh. Jobs resume after long absences instead of restarting. The lease is
+released between calls; no tab owns it while viewing.
 
 Fresh source and queue results last 60 seconds. The frontend rechecks while
 visible, pauses when hidden, and resumes on return. All chart ranges reuse the
-aggregate payload; most chart changes require no network request at all. Newly
-archived events appear after a later successful scan. A full scan during writes
-is not a point-in-time snapshot. A failed update keeps the prior result with an
-error and timestamp; it is not a zero-count result.
+aggregate payload. Source reads use the `environment-time` global secondary
+index, starting at the last successfully refreshed open UTC hour and ending at
+the refresh start time. Within an hour, only that hour is replaced. After rollover,
+the previous open hour is finalized once; hours missed while the dashboard was
+closed are collected in the same range. Previously sealed hours are never read
+from the event tables or rewritten by ordinary refreshes. Unique day/week/all-time
+unions still use cached fingerprints across the requested history.
+
+This implements the requested immutable-history policy: records archived after
+their hour has already been sealed will not revise that hour. The time index is
+eventually consistent. A failed query preserves the previous result with its
+as-of timestamp; it is not a zero-count result. Freshness is measured from query
+start, so a resumed old snapshot cannot be reported as current.
 
 ## Read-only preflight
 
@@ -98,9 +111,43 @@ make admin-preflight PROFILE=flat-girl
 This reads table status, approximate size/item counts, key schemas, and queue
 attributes, saving a non-personal report to `.deploy/admin/preflight.json`.
 DynamoDB size counters are approximate. Assess large scans before rollout;
-50 items/page is deliberate to bound conditional transactions. The existing
-source schema has no time index, so even a single-day source refresh reads the
-whole table. Review indexing separately if volume later warrants it.
+50 items/page is deliberate to bound conditional transactions. The time index permits bounded source reads after the initial historical build.
+Wait for both indexes to become ACTIVE before deploying the indexed reader.
+
+## Incremental-refresh rollout (deployed November 8, 2026)
+
+The November 8 incremental-refresh change replaces repeated full scans with
+indexed time-range queries and durable completed-hour rollups. All 53 backend/infrastructure tests, TypeScript checking, and synthesis pass.
+The live diff confirms exactly two additive event-table indexes, one admin read
+policy change, and metrics Lambda code; no other resource changes. Review:
+`.deploy/admin/incremental-review.json`. Both indexes are now ACTIVE; the approved
+access and admin stack updates are deployed. Live verification at 9:07 PM CST
+confirmed that all four stack resource templates, the read policy, and the Lambda
+source match the reviewed changes. Public-site HTTP 200, signup preflight HTTP 204,
+and unauthenticated admin API HTTP 401 passed. Receipt:
+`.deploy/admin/incremental-verification-first.json`.
+
+The initial verification still found schema 2 snapshots because an authenticated
+refresh had not yet initialized schema 3. The first refresh performs that one-time
+build. Signed-in refresh behavior has local regression coverage; deployment checks
+alone do not establish live authenticated refresh success.
+
+1. Review and deploy `signup-beta` and `signup-production`; the intended changes
+   add only the `environment-time` index to each existing event table. It uses
+   existing `environment` and `event_time` attributes and projects only event
+   name, IP address, and user-agent (event ID is included automatically). No event
+   rewrite or primary-key replacement is needed. Wait for both indexes to be ACTIVE.
+2. Review `access`: replace the admin runtime's projected table Scan permission
+   with projected Query permission on those two specific indexes. Deploy this
+   immediately before `admin` to minimize the old reader's permission gap.
+3. Deploy `admin`: only metrics Lambda code changes. No static frontend release
+   is required. The first refresh initializes schema 3 once; subsequent refreshes
+   query only the unfinished interval. Verify a second refresh and hour rollover.
+
+Do not deploy unrelated pending changes in any stack. For rollback, restore the
+previous projected Scan permission before restoring the schema 2 Lambda. Leave
+the additive indexes in place; deleting an index is unnecessary for rollback.
+Do not purge source records or historical cache as a recovery step.
 
 ## Infrastructure and credential setup
 

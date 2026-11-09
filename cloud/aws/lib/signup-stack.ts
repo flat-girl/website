@@ -9,7 +9,7 @@ import { FilterPattern, LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-li
 import { Alarm, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch'
 import { Queue, QueueEncryption } from 'aws-cdk-lib/aws-sqs'
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources'
-import { Table, AttributeType, BillingMode, TableEncryption } from 'aws-cdk-lib/aws-dynamodb'
+import { Table, AttributeType, BillingMode, TableEncryption, ProjectionType } from 'aws-cdk-lib/aws-dynamodb'
 import { ARecord, RecordTarget } from 'aws-cdk-lib/aws-route53'
 import { ApiGatewayv2DomainProperties } from 'aws-cdk-lib/aws-route53-targets'
 import type { Construct } from 'constructs'
@@ -41,6 +41,10 @@ export class Signup extends Base {
       billingMode: BillingMode.PAY_PER_REQUEST, encryption: TableEncryption.AWS_MANAGED,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
+    })
+    events.addGlobalSecondaryIndex({ indexName: 'environment-time',
+      partitionKey: { name: 'environment', type: AttributeType.STRING }, sortKey: { name: 'event_time', type: AttributeType.NUMBER },
+      projectionType: ProjectionType.INCLUDE, nonKeyAttributes: ['event_name', 'client_ip_address', 'client_user_agent'],
     })
     const worker = new Function(this, 'MetaWorker', {
       functionName: metaWorkerName(env), runtime: Runtime.NODEJS_24_X, architecture: Architecture.ARM_64,

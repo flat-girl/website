@@ -65,7 +65,7 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(len(calls[0][1]['Value']), 64)
 
     def test_live_rollup_verifier_handles_progress_and_checks_aggregate_integrity(self):
-        ready = dict(state='ready', data=dict(schema=2, coverageStart=1794085200, hours=[[1794085200, 3, 1, 2, 0]],
+        ready = dict(state='ready', data=dict(schema=3, coverageStart=1794085200, hours=[[1794085200, 3, 1, 2, 0]],
                      totalViews=3, totalLeads=1, calculatedAt=42, totalUniqueViews=2, unidentifiedViews=0,
                      uniqueDays=[['2026-11-07', 2, 2]], uniqueWeeks=[['2026-11-02', 2]]),
                      dlq=dict(error=False, visible=0, inFlight=0, delayed=0))

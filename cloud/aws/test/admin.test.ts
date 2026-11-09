@@ -4,18 +4,27 @@ import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
 import { App } from 'aws-cdk-lib'
 import { Template } from 'aws-cdk-lib/assertions'
+import { Signup } from '../lib/signup-stack.js'
 import { Admin } from '../lib/admin-stack.js'
 import { Access } from '../lib/access.js'
 import { config } from '../lib/config.js'
 const require = createRequire(import.meta.url)
-const { createStore, createService, createHandler } = require('../lambda/admin.cjs')
+const { createStore, createService, createHandler, sourceQuery } = require('../lambda/admin.cjs')
 const auth = require('../lambda/admin-auth.cjs')
 const credentials = 'Basic ' + Buffer.from('admin:fixture-password-not-live').toString('base64')
 const digest = createHash('sha256').update(credentials).digest('hex')
 const conditional = () => Object.assign(Error('condition'), { name: 'ConditionalCheckFailedException' })
+async function finish(f: ReturnType<typeof fixture>) {
+  for (let n = 0; n < 100; n++) {
+    const result = await f.service().ensure('production')
+    if (result.state === 'ready') return result
+  }
+  assert.fail('refresh did not finish')
+}
+const archived = (f: ReturnType<typeof fixture>) => [...f.items.values()].filter(x => x.pk.S.startsWith('history#'))
 function fixture() {
-  let time = Date.parse('2026-11-08T18:00:00Z'), scanCalls = 0, queueCalls = 0, fail = false, loseReply = false
-  const items = new Map<string, any>(), operations: any[] = []
+  let time = Date.parse('2026-11-08T18:00:00Z'), queryCalls = 0, queueCalls = 0, fail = false, loseReply = false
+  const items = new Map<string, any>(), operations: any[] = [], ranges: number[][] = []
   const id = (k: any) => k.pk.S + '/' + k.sk.S
   const copy = (x: any) => x === undefined ? undefined : structuredClone(x)
   const request = async (operation: string, input: any): Promise<any> => {
@@ -44,13 +53,17 @@ function fixture() {
     throw Error(operation)
   }
   const store = createStore(request, 'cache', () => time)
-  const event = (name: string, hoursAgo: number, env = 'production') => ({ event_id: { S: 'ignored-id' }, event_name: { S: name }, environment: { S: env }, event_time: { N: String(time / 1000 - hoursAgo * 3600) } })
+  const event = (name: string, hoursAgo: number, env = 'production') => ({ event_id: { S: 'ignored-id' }, event_name: { S: name }, environment: { S: env }, event_time: { N: String(Math.floor(time / 1000 - hoursAgo * 3600)) } })
   let source = [event('ViewContent', 2), event('Lead', 1)]
   const service = () => createService({ store, now: () => time,
-    scan: async (_env: string, cursor: any) => { scanCalls++; if (fail) throw Error('scan failed'); return cursor ? { Items: source.slice(1) } : { Items: source.slice(0, 1), LastEvaluatedKey: { event_id: { S: 'page1' } } } },
+    query: async (_env: string, cursor: any, from: number, through: number) => {
+      queryCalls++; ranges.push([from, through]); if (fail) throw Error('query failed')
+      const matches = source.filter(item => Number(item.event_time.N) >= from && Number(item.event_time.N) <= through)
+      return cursor ? { Items: matches.slice(1) } : { Items: matches.slice(0, 1), ...(matches.length > 1 ? { LastEvaluatedKey: { event_id: { S: 'page1' } } } : {}) }
+    },
     queue: async () => { queueCalls++; return { visible: 0, inFlight: 0, delayed: 0 } },
   })
-  return { store, service, operations, items, now: () => time, advance: (ms: number) => { time += ms }, calls: () => ({ scanCalls, queueCalls }), fail: () => { fail = true }, lose: () => { loseReply = true }, setSource: (x: any[]) => { source = x }, event }
+  return { store, service, operations, items, ranges, now: () => time, advance: (ms: number) => { time += ms }, calls: () => ({ queryCalls, queueCalls }), fail: () => { fail = true }, lose: () => { loseReply = true }, setSource: (x: any[]) => { source = x }, event }
 }
 test('persistent pagination survives a new service instance; cache hits do not read sources or SQS', async () => {
   const f = fixture()
@@ -61,7 +74,7 @@ test('persistent pagination survives a new service instance; cache hits do not r
   assert.equal(result.state, 'ready'); assert.equal(result.data.totalLeads, 1); assert.equal(result.data.totalViews, 1)
   assert.equal(result.data.hours.length, 2)
   await f.service().ensure('production'); await f.service().read('production')
-  assert.deepEqual(f.calls(), { scanCalls: 2, queueCalls: 1 })
+  assert.deepEqual(f.calls(), { queryCalls: 2, queueCalls: 1 })
   assert.equal((await f.service().read('beta')).data, null)
   const writes = f.operations.filter(([op]) => ['UpdateItem', 'DeleteItem', 'TransactWriteItems'].includes(op))
   assert.ok(writes.every(([, r]) => r.TableName === 'cache' || r.TransactItems.every((x: any) => Object.values(x).every((v: any) => v.TableName === 'cache'))))
@@ -72,7 +85,7 @@ test('mutex contention, lease expiry, stale-owner fencing, and conditional relea
   assert.equal(f.operations.at(-1)[1].ExpressionAttributeNames['#owner'], 'owner')
   assert.match(f.operations.at(-1)[1].UpdateExpression, /SET #owner =/)
   assert.equal((await f.service().ensure('production')).state, 'waiting')
-  assert.deepEqual(f.calls(), { scanCalls: 0, queueCalls: 0 })
+  assert.deepEqual(f.calls(), { queryCalls: 0, queueCalls: 0 })
   f.advance(45001)
   assert.equal(await f.store.acquire('new'), true)
   await assert.rejects(f.store.commit('old', [['bad', 'state', {}]]))
@@ -85,22 +98,22 @@ test('lost checkpoint response resumes without applying a source page twice', as
   const f = fixture()
   // Prime SQS, then lose the page transaction response rather than the queue write.
   await f.store.acquire('seed')
-  await f.store.commit('seed', [['dlq#production', 'state', { schema: 2, freshUntil: f.now() + 60000, visible: 0, inFlight: 0, delayed: 0 }]])
+  await f.store.commit('seed', [['dlq#production', 'state', { schema: 3, freshUntil: f.now() + 60000, visible: 0, inFlight: 0, delayed: 0 }]])
   await f.store.release('seed')
   f.lose()
   await assert.rejects(f.service().ensure('production'))
   const result = await f.service().ensure('production')
   assert.equal(result.data.totalViews, 1); assert.equal(result.data.totalLeads, 1)
-  assert.equal(f.calls().scanCalls, 2)
+  assert.equal(f.calls().queryCalls, 2)
 })
-test('stale scan failure retains last complete generation; cache loss is not reported as zero', async () => {
+test('stale query failure retains last complete generation; cache loss is not reported as zero', async () => {
   const f = fixture()
   await f.service().ensure('production'); const good = await f.service().ensure('production')
   f.advance(60001); f.fail()
   await assert.rejects(f.service().ensure('production'))
   const stale = await f.service().read('production')
   assert.equal(stale.state, 'stale'); assert.equal(stale.data.generation, good.data.generation)
-  for (const k of f.items.keys()) if (k.startsWith('data#')) { f.items.delete(k); break }
+  for (const k of f.items.keys()) if (k.startsWith('history#')) { f.items.delete(k); break }
   assert.equal((await f.service().read('production')).state, 'missing')
 })
 test('invalid events are excluded; zero rows is a complete empty result', async () => {
@@ -153,10 +166,12 @@ test('admin infrastructure is independent; runtime writes only cache and logs', 
       if (/:(Put|Update|Delete|ConditionCheck)/.test(action) && !action.startsWith('logs:')) assert.equal(s.Resource, 'arn:aws:dynamodb:us-east-1:111111111111:table/flat-girl-admin-cache')
     }
   }
-  const scan = runtime.Properties.PolicyDocument.Statement.find((s: any) => s.Action === 'dynamodb:Scan')
-  assert.equal(scan.Condition.StringEquals['dynamodb:Select'], 'SPECIFIC_ATTRIBUTES')
-  assert.deepEqual(scan.Condition['ForAllValues:StringEquals']['dynamodb:Attributes'], ['event_id', 'event_name', 'event_time', 'environment', 'client_ip_address', 'client_user_agent'])
-  assert.ok(!JSON.stringify(scan).includes('email'))
+  const query = runtime.Properties.PolicyDocument.Statement.find((s: any) => s.Action === 'dynamodb:Query')
+  assert.equal(query.Condition.StringEquals['dynamodb:Select'], 'SPECIFIC_ATTRIBUTES')
+  assert.deepEqual(query.Condition['ForAllValues:StringEquals']['dynamodb:Attributes'], ['event_id', 'event_name', 'event_time', 'environment', 'client_ip_address', 'client_user_agent'])
+  assert.ok(!JSON.stringify(query).includes('email'))
+  assert.deepEqual(query.Resource, ['beta', 'production'].map(env => `arn:aws:dynamodb:us-east-1:111111111111:table/flat-girl-${env}-events/index/environment-time`))
+  assert.ok(!JSON.stringify(runtime).includes('dynamodb:Scan'))
 })
 
 test('unique views deduplicate across pages/hours/days, hide fingerprints, and preserve raw counts', async () => {
@@ -182,7 +197,7 @@ test('production cutoff is November 7 at 3 PM Chicago; beta history remains inde
   await f.service().ensure('production'); const r = await f.service().ensure('production')
   assert.equal(r.data.totalViews, 1); assert.equal(r.data.totalLeads, 1); assert.equal(r.data.coverageStart, start)
 })
-test('fingerprint canonicalizes IPv6 and uses a per-generation secret; missing identity is not invented', () => {
+test('fingerprint canonicalizes IPv6 and uses a private archive secret; missing identity is not invented', () => {
   const { fingerprint, summarize } = require('../lambda/admin-unique.cjs')
   const item = (ip: string) => ({ client_ip_address: { S: ip }, client_user_agent: { S: 'Browser' } })
   const salt = '11'.repeat(32)
@@ -192,4 +207,91 @@ test('fingerprint canonicalizes IPv6 and uses a per-generation secret; missing i
   const a = Date.parse('2026-11-09T05:00:00Z') / 1000, b = a + 3600
   const r = summarize([{ hours: [[a, 1, 0], [b, 1, 0]], identities: { same: [a, b] } }])
   assert.equal(r.totalUniqueViews, 1); assert.deepEqual(r.uniqueWeeks.map((w: any[]) => w[1]), [1, 1])
+})
+
+test('refresh after an hour preserves history and queries only the previously open hour onward', async () => {
+  const f = fixture(), start = f.now() / 1000
+  const history = f.event('ViewContent', 2), live = f.event('ViewContent', 0)
+  f.setSource([history, live]); await finish(f)
+  const frozen = structuredClone(archived(f))
+  f.advance(3600000)
+  // Historical source changes are ignored; the prior partial hour is finalized once.
+  f.setSource([live, f.event('Lead', 0.5), f.event('ViewContent', 0)])
+  const updated = await finish(f)
+  assert.equal(updated.data.totalViews, 3); assert.equal(updated.data.totalLeads, 1)
+  assert.ok(f.ranges.slice(2).every(([from]) => from === start))
+  for (const item of frozen) assert.deepEqual(f.items.get(item.pk.S + '/' + item.sk.S), item)
+  const sealed = structuredClone(archived(f)), before = f.ranges.length
+  f.advance(60001); await finish(f)
+  assert.ok(f.ranges.slice(before).every(([from]) => from === start + 3600))
+  assert.deepEqual(archived(f), sealed)
+  assert.ok(archived(f).every(item => !item.ttl))
+})
+test('same-hour refresh replaces partial counts and deduplicates visitors across frozen history', async () => {
+  const f = fixture()
+  const person = (hours: number) => ({ ...f.event('ViewContent', hours), client_ip_address: { S: '192.0.2.9' }, client_user_agent: { S: 'Browser' } })
+  const past = person(1), live = person(0)
+  f.setSource([past, live]); await finish(f)
+  const frozen = structuredClone(archived(f))
+  f.advance(60001); f.setSource([past, live, person(0), f.event('Lead', 0)])
+  const r = await finish(f)
+  assert.equal(r.data.totalViews, 3); assert.equal(r.data.totalUniqueViews, 1); assert.equal(r.data.totalLeads, 1)
+  assert.equal(r.data.hours.at(-1)[1], 2); assert.equal(r.data.hours.at(-1)[3], 1)
+  assert.deepEqual(archived(f), frozen)
+  const head = await f.store.get('head#production')
+  assert.ok(head.salt); assert.ok(!JSON.stringify(r).includes(head.salt))
+  assert.ok(!JSON.stringify(r).includes('identities'))
+})
+test('expired live cache after a long absence reuses durable history and catches up missing hours', async () => {
+  const f = fixture(), start = f.now() / 1000
+  const past = f.event('ViewContent', 2), live = f.event('Lead', 0)
+  f.setSource([past, live]); await finish(f)
+  const frozen = structuredClone(archived(f)), before = f.ranges.length
+  f.advance(8 * 86400000)
+  for (const [key, item] of f.items) if (item.ttl && Number(item.ttl.N) < f.now() / 1000) f.items.delete(key)
+  f.setSource([live, f.event('ViewContent', 24), f.event('Lead', 0)])
+  const r = await finish(f)
+  assert.equal(r.data.totalViews, 2); assert.equal(r.data.totalLeads, 2)
+  assert.ok(f.ranges.slice(before).every(([from]) => from === start))
+  for (const item of frozen) assert.deepEqual(f.items.get(item.pk.S + '/' + item.sk.S), item)
+})
+test('staged closed hours stay invisible and a lost checkpoint resumes after more than an hour', async () => {
+  const f = fixture()
+  const past = f.event('ViewContent', 2), live = f.event('Lead', 0)
+  f.setSource([past, live]); const initial = await finish(f)
+  f.advance(3600000); f.setSource([live, f.event('ViewContent', 0)])
+  await f.store.acquire('seed')
+  await f.store.commit('seed', [['dlq#production', 'state', { schema: 3, freshUntil: f.now() + 60000 }]])
+  await f.store.release('seed')
+  f.lose(); await assert.rejects(f.service().ensure('production'))
+  const stale = await f.service().read('production')
+  assert.deepEqual(stale.data, initial.data)
+  const job = await f.store.get('job#production')
+  f.advance(2 * 3600000)
+  const completed = await f.service().ensure('production')
+  assert.equal(completed.data.generation, job.generation)
+  assert.equal(completed.state, 'stale')
+  assert.equal(completed.data.totalLeads, 1); assert.equal(completed.data.totalViews, 2)
+  const fresh = await finish(f)
+  assert.equal(fresh.data.totalLeads, 1); assert.equal(fresh.data.totalViews, 2)
+})
+test('source query uses an indexed inclusive time range and preserves pagination', () => {
+  const cursor = { event_id: { S: 'next' } }, q = sourceQuery('production', cursor, 100, 200)
+  assert.equal(q.IndexName, 'environment-time'); assert.equal(q.Limit, 50)
+  assert.match(q.KeyConditionExpression, /BETWEEN :from AND :through/)
+  assert.deepEqual(q.ExpressionAttributeValues, { ':env': { S: 'production' }, ':from': { N: '100' }, ':through': { N: '200' } })
+  assert.deepEqual(q.ExclusiveStartKey, cursor)
+  assert.equal(q.ConsistentRead, undefined)
+})
+test('both source tables have a projected time index without changing their primary key', () => {
+  const p = config({ account: '111111111111', region: 'us-east-1', hostedZoneId: 'ZEXAMPLE', domain: 'flatgirl.net', operatorPrincipalArn: null, betaEnabled: true, productionNoindex: true })
+  for (const env of ['beta', 'production'] as const) {
+    const template = Template.fromStack(new Signup(new App(), p, env, { turnstileSiteKey: '', beta: { enabled: false, listId: 5, rateLimit: 5, burstLimit: 10 }, production: { enabled: false, listId: 4, rateLimit: 5, burstLimit: 10 } }))
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      KeySchema: [{ AttributeName: 'event_id', KeyType: 'HASH' }],
+      GlobalSecondaryIndexes: [{ IndexName: 'environment-time',
+        KeySchema: [{ AttributeName: 'environment', KeyType: 'HASH' }, { AttributeName: 'event_time', KeyType: 'RANGE' }],
+        Projection: { ProjectionType: 'INCLUDE', NonKeyAttributes: ['event_name', 'client_ip_address', 'client_user_agent'] } }],
+    })
+  }
 })

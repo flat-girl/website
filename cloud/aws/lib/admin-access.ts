@@ -10,7 +10,7 @@ export function adminAccess(scope: Construct, p: Config, operator: iam.Role, exe
   const runtime = new iam.Role(scope, 'AdminRuntime', { roleName: adminFunction, assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com') })
   const edge = new iam.Role(scope, 'AdminEdgeRuntime', { roleName: adminEdge, assumedBy: new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'), new iam.ServicePrincipal('edgelambda.amazonaws.com')) })
   grant(runtime, ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:ConditionCheckItem'], [cache])
-  grant(runtime, ['dynamodb:Scan'], ['beta', 'production'].map(env => arn('dynamodb', `table/flat-girl-${env}-events`)), {
+  grant(runtime, ['dynamodb:Query'], ['beta', 'production'].map(env => arn('dynamodb', `table/flat-girl-${env}-events/index/environment-time`)), {
     'ForAllValues:StringEquals': { 'dynamodb:Attributes': ['event_id', 'event_name', 'event_time', 'environment', 'client_ip_address', 'client_user_agent'] },
     StringEquals: { 'dynamodb:Select': 'SPECIFIC_ATTRIBUTES' },
     Null: { 'dynamodb:Attributes': 'false' },
