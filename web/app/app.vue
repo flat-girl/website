@@ -24,8 +24,8 @@ useHead({
     <SarahCarousel />
     <div class="product-details">
       <p>Making plush blankets because we can't be the only ones who saw this commercial as kids.</p>
-      <p>Doing a <strong>limited</strong> run of <strong>500</strong>; they will drop sometime in November, fulfilment by <strong>Christmas</strong>.</p>
-      <p>We might make more, not quite sure yet.</p>
+      <p>Doing a <strong>limited</strong> run of <strong>500</strong>; they will drop sometime in November.</p>
+      <p>$60, free shipping, fulfilment by <strong>Christmas</strong>.</p>
     </div>
     <SignupForm />
   </main>
