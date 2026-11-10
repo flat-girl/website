@@ -25,8 +25,9 @@ SSM SecureStrings:
 
 The public key, list IDs, throttle settings, and enabled flags are in
 [`signup.json`](signup.json). No checkbox, consent attributes, consent timestamps,
-or wording-version tracking is collected. Brevo manages the welcome email;
-our backend never calls an email-sending endpoint or configures automation.
+or wording-version tracking is collected. Brevo manages the welcome email.
+Owner notifications use a separate SQS/SES background worker; see
+[NOTIFICATIONS.md](NOTIFICATIONS.md) for setup and the Brevo cutover.
 
 ## 1. Confirm providers and update AWS access
 

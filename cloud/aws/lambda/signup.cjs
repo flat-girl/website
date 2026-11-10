@@ -99,6 +99,14 @@ function createHandler(settings, dependencies) {
           registered = await existing(raced)
         } else registered = true
       }
+      // Await only durable queue acceptance; SES delivery runs in a separate worker.
+      if (registered && dependencies.notify) {
+        const budget = Math.min(1500, (context?.getRemainingTimeInMillis?.() ?? (15000 - (Date.now() - start))) - 1000)
+        try {
+          if (budget <= 0) throw new Error('notification_budget')
+          await dependencies.notify(input.email, AbortSignal.timeout(budget))
+        } catch { dependencies.log({ outcome: 'notification_enqueue_failed' }) }
+      }
       if (registered && dependencies.meta) {
         const budget = Math.min(1500, (context?.getRemainingTimeInMillis?.() ?? 15000) - 1000)
         if (budget > 0) try {
@@ -137,11 +145,19 @@ let runtimeHandler
 exports.handler = async (event, context) => {
   if (!runtimeHandler) {
     const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm')
+    const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs')
+    const sqs = new SQSClient({ maxAttempts: 1 })
     runtimeHandler = createHandler({
       enabled: process.env.SIGNUP_ENABLED === 'true', origin: process.env.ALLOWED_ORIGIN,
       listId: Number(process.env.BREVO_LIST_ID), environment: process.env.META_ENVIRONMENT,
     }, {
       fetch,
+      notify: async (email, signal) => {
+        const result = await sqs.send(new SendMessageCommand({ QueueUrl: process.env.NOTIFICATION_QUEUE_URL,
+          MessageBody: JSON.stringify({ schema: 1, environment: process.env.META_ENVIRONMENT, email }),
+        }), { abortSignal: signal })
+        if (!result.MessageId) throw new Error('notification_queue')
+      },
       meta: metaApi.createRuntime(process.env.META_ENVIRONMENT, { queueUrl: process.env.META_QUEUE_URL }),
       secrets: createSecretLoader(new SSMClient({ maxAttempts: 1 }), GetParameterCommand, {
         turnstile: process.env.TURNSTILE_PARAMETER, brevo: process.env.BREVO_PARAMETER,

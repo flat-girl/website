@@ -43,6 +43,7 @@ help:
 	  '  make signup-preflight PROFILE=flat-girl SITE_ENV=beta' \
 	  '  make signup-status PROFILE=flat-girl SITE_ENV=beta' \
 	  '  make signup-enabled PROFILE=flat-girl SITE_ENV=beta ENABLED=false DRY_RUN=1' \
+	  '  make signup-notifications PROFILE=flat-girl SITE_ENV=production ACTION=status|seed|enable|test|disable' \
 	  '' \
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
 	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
@@ -106,6 +107,10 @@ signup-preflight:
 
 signup-status:
 	$(PYTHON) tools/signup.py status $(profile) $(site_env)
+
+.PHONY: signup-notifications
+signup-notifications:
+	$(no_dry_run)$(PYTHON) tools/notifications.py $(call required,ACTION) $(profile) $(site_env)
 
 signup-enabled:
 	$(PYTHON) tools/signup.py enabled $(profile) $(site_env) --value $(call required,ENABLED) $(dry_run)

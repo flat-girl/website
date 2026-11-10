@@ -8,6 +8,8 @@ export const signupParameters = {
   turnstile: '/flat-girl/signup/turnstile-secret',
   brevo: '/flat-girl/signup/brevo-api-key',
 }
+export const notificationParameter = (env: SignupEnvironment) => `/flat-girl/signup/${env}/notification`
+export const notificationName = (env: SignupEnvironment) => `flat-girl-${env}-notification`
 export function signupConfig(value: any): SignupConfig {
   if (!value || Object.keys(value).sort().join(',') !== 'beta,production,turnstileSiteKey' ||
       typeof value.turnstileSiteKey !== 'string' ||

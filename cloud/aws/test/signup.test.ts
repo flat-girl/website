@@ -20,8 +20,8 @@ function event(body: any = {}) {
   return { requestContext: { http: { method: 'POST' } }, headers: { origin: 'https://flatgirl.net', 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'reader+launch@example.com', turnstileToken: 'test-token', website: '', ...body }), isBase64Encoded: false }
 }
-function fixture(responses: any[], settings: any = {}) {
-  const calls: any[] = [], logs: any[] = []
+function fixture(responses: any[], settings: any = {}, extra: any = {}) {
+  const calls: any[] = [], logs: any[] = [], notifications: string[] = []
   let secretCalls = 0
   const handler = createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 4, ...settings }, {
     secrets: async () => { secretCalls++; return { turnstile: 'private-turnstile', brevo: 'private-brevo' } },
@@ -33,8 +33,10 @@ function fixture(responses: any[], settings: any = {}) {
       return next
     },
     log: (value: unknown) => logs.push(value),
+    notify: async (email: string) => { notifications.push(email) },
+    ...extra,
   })
-  return { handler, calls, logs, secretCalls: () => secretCalls }
+  return { handler, calls, logs, notifications, secretCalls: () => secretCalls }
 }
 
 test('new signup validates server-side and creates only the configured membership', async () => {
@@ -44,6 +46,7 @@ test('new signup validates server-side and creates only the configured membershi
   assert.equal(f.calls[0].redirect, 'error')
   assert.ok(f.calls.every(c => c.signal instanceof AbortSignal))
   assert.equal(f.calls.length, 3)
+  assert.deepEqual(f.notifications, ['reader+launch@example.com'])
 })
 
 test('beta shares keys but targets list 5 and accepts only its hostname/origin', async () => {
@@ -68,6 +71,7 @@ test('invalid requests never read secrets or call providers', async () => {
     const f = fixture([])
     assert.ok((await f.handler(request)).statusCode >= 400)
     assert.equal(f.calls.length, 0); assert.equal(f.secretCalls(), 0)
+    assert.deepEqual(f.notifications, [])
   }
 })
 
@@ -97,6 +101,7 @@ test('duplicates and global/list suppression are identical no-write acceptances'
     const response = await f.handler(event())
     assert.equal(response.statusCode, 200); assert.deepEqual(JSON.parse(response.body), accepted)
     assert.equal(response.headers['cache-control'], 'no-store'); assert.equal(f.calls.length, 2)
+    assert.deepEqual(f.notifications, [])
   }
 })
 
@@ -105,6 +110,7 @@ test('existing eligible contact gets a list-only update, preserving attributes a
   assert.equal((await f.handler(event())).statusCode, 200)
   assert.equal(f.calls[2].method, 'PUT')
   assert.deepEqual(JSON.parse(f.calls[2].body), { listIds: [4] })
+  assert.equal(f.notifications.length, 1)
 })
 
 test('unknown contact state or consent-group configuration fails without updating', async () => {
@@ -117,8 +123,10 @@ test('unknown contact state or consent-group configuration fails without updatin
 test('duplicate-create race re-reads state and respects new suppression', async () => {
   const f = fixture([reply(200, tokenReply), reply(404), reply(400, { code: 'duplicate_parameter' }), reply(200, contact({ emailBlacklisted: true }))])
   assert.equal((await f.handler(event())).statusCode, 200); assert.equal(f.calls.length, 4)
+  assert.deepEqual(f.notifications, [])
   const g = fixture([reply(200, tokenReply), reply(404), reply(400, { code: 'duplicate_parameter' }), reply(200, contact()), reply(204)])
   assert.equal((await g.handler(event())).statusCode, 200); assert.equal(g.calls[4].method, 'PUT')
+  assert.equal(g.notifications.length, 1)
 })
 
 test('provider errors and ambiguous writes fail without automatic write replay or sensitive logs', async () => {
@@ -128,11 +136,40 @@ test('provider errors and ambiguous writes fail without automatic write replay o
     const log = JSON.stringify(f.logs)
     for (const secret of ['reader+', 'private-brevo', 'test-token']) assert.ok(!log.includes(secret))
     assert.equal(f.logs[0].outcome, 'brevo_failed')
+    assert.deepEqual(f.notifications, [])
   }
   const lookupFailure = fixture([reply(200, tokenReply), reply(429)])
   assert.equal((await lookupFailure.handler(event())).statusCode, 503); assert.equal(lookupFailure.calls.length, 2)
   const retry = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [4] }))])
   assert.equal((await retry.handler(event())).statusCode, 200)
+})
+
+test('notification queue failure preserves signup acceptance, privacy and Meta tracking', async () => {
+  let tracked = false
+  const f = fixture([reply(200, tokenReply), reply(404), reply(201)], {}, {
+    notify: async () => { throw Error('reader+launch@example.com secret') },
+    meta: { config: async () => { tracked = true; return { mode: 'off' } } },
+  })
+  assert.equal((await f.handler(event())).statusCode, 200)
+  assert.ok(tracked)
+  assert.equal(f.logs[0].outcome, 'notification_enqueue_failed')
+  assert.ok(!JSON.stringify(f.logs).includes('reader+'))
+})
+
+test('signup awaits queue acceptance only and skips enqueue when its time budget is exhausted', async () => {
+  let queued = false
+  const f = fixture([reply(200, tokenReply), reply(404), reply(201)], {}, {
+    notify: async (_email: string, signal: AbortSignal) => {
+      assert.ok(signal instanceof AbortSignal)
+      await Promise.resolve(); queued = true
+    },
+  })
+  assert.equal((await f.handler(event())).statusCode, 200)
+  assert.ok(queued)
+  const g = fixture([reply(200, tokenReply), reply(404), reply(201)])
+  assert.equal((await g.handler(event(), { getRemainingTimeInMillis: () => 500 })).statusCode, 200)
+  assert.deepEqual(g.notifications, [])
+  assert.equal(g.logs[0].outcome, 'notification_enqueue_failed')
 })
 
 test('disabled backend does not read secrets and secret loader caches only complete results', async () => {
@@ -174,11 +211,24 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
       FunctionName: `flat-girl-${env}-meta-worker`, Environment: { Variables: { EVENTS_TABLE: { Ref: Object.keys(template.findResources('AWS::DynamoDB::Table'))[0] } } },
     })
     template.resourceCountIs('AWS::IAM::Role', 0)
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 4)
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 5)
+    template.hasResourceProperties('AWS::SQS::Queue', {
+      QueueName: `flat-girl-${env}-notification`, SqsManagedSseEnabled: true,
+      VisibilityTimeout: 180, RedrivePolicy: { maxReceiveCount: 5 },
+    })
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      FunctionName: `flat-girl-${env}-notification`, Timeout: 15,
+      Environment: { Variables: { ENVIRONMENT: env, NOTIFICATION_PARAMETER: `/flat-girl/signup/${env}/notification` } },
+    })
+    template.hasResourceProperties('AWS::Lambda::EventSourceMapping', { BatchSize: 1, FunctionResponseTypes: ['ReportBatchItemFailures'] })
     template.hasResource('AWS::Logs::LogGroup', { DeletionPolicy: 'RetainExceptOnCreate', UpdateReplacePolicy: 'Retain' })
     assert.ok(!JSON.stringify(template.toJSON()).includes('FlatGirlBetaSite'))
   }
   const accessJson = Template.fromStack(access).toJSON()
+  Template.fromStack(access).hasResourceProperties('AWS::SES::EmailIdentity', { EmailIdentity: 'flatgirl.net' })
+  const mailRecords = Object.values(Template.fromStack(access).findResources('AWS::Route53::RecordSet')) as any[]
+  assert.equal(mailRecords.length, 3)
+  assert.ok(mailRecords.every(record => record.Properties.Type === 'CNAME'))
   const executionPolicy = Object.entries(accessJson.Resources).filter(([id, resource]: [string, any]) =>
     id.startsWith('Execution') && ['AWS::IAM::Policy','AWS::IAM::ManagedPolicy'].includes(resource.Type))
     .flatMap(([, resource]: [string, any]) => resource.Properties.PolicyDocument.Statement)
@@ -208,6 +258,16 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
   for (const [id, resource] of Object.entries(accessJson.Resources) as [string, any][]) {
     if (/Publisher|SignupRuntime|MetaEdgeRuntime/.test(id) && resource.Type === 'AWS::IAM::Policy')
       assert.ok(!JSON.stringify(resource).includes('dynamodb:'))
+    if (/Publisher|SignupRuntime|MetaEdgeRuntime/.test(id) && resource.Type === 'AWS::IAM::Policy')
+      assert.ok(!JSON.stringify(resource).includes('ses:'))
+    if (/NotificationRuntime/.test(id) && resource.Type === 'AWS::IAM::Policy') {
+      const statements = resource.Properties.PolicyDocument.Statement
+      const send = statements.find((s: any) => [s.Action].flat().includes('ses:SendRawEmail'))
+      assert.deepEqual(send.Condition, { StringEquals: { 'ses:FromAddress': 'high@flatgirl.net' },
+        'ForAllValues:StringEquals': { 'ses:Recipients': ['high@flatgirl.net'] } })
+      assert.ok(!JSON.stringify(resource).includes('brevo-api-key'))
+      assert.ok(!JSON.stringify(resource).includes('ssm:PutParameter'))
+    }
   }
   app.synth() // Also exercises the 51,200-byte inline-template limit.
   assert.throws(() => signupConfig({ ...cfg, beta: { ...cfg.beta, listId: 4 } }))

@@ -1,4 +1,5 @@
 import { lambdaCode, metaQueueName, metaWorkerName, eventTableName } from './meta.js'
+import { readFileSync } from 'node:fs'
 import { Duration, RemovalPolicy, Tags } from 'aws-cdk-lib'
 import * as api from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations'
@@ -15,7 +16,7 @@ import { ApiGatewayv2DomainProperties } from 'aws-cdk-lib/aws-route53-targets'
 import type { Construct } from 'constructs'
 import { Base } from './stacks.js'
 import { stacks, type Config } from './config.js'
-import { signupConfig, signupHost, signupNames, signupOrigin, signupParameters, type SignupConfig, type SignupEnvironment } from './signup-config.js'
+import { signupConfig, signupHost, signupNames, signupOrigin, signupParameters, notificationParameter, notificationName, type SignupConfig, type SignupEnvironment } from './signup-config.js'
 
 export class Signup extends Base {
   constructor(scope: Construct, p: Config, env: SignupEnvironment, raw: SignupConfig) {
@@ -60,6 +61,33 @@ export class Signup extends Base {
     this.output('MetaQueueUrl', queue.queueUrl)
     this.output('MetaWorkerName', worker.functionName)
     this.output('EventsTableName', events.tableName)
+    const notificationDlq = new Queue(this, 'NotificationDeadLetters', {
+      queueName: `${notificationName(env)}-dlq`, encryption: QueueEncryption.SQS_MANAGED,
+      enforceSSL: true, retentionPeriod: Duration.days(14), removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+    })
+    const notificationQueue = new Queue(this, 'NotificationQueue', {
+      queueName: notificationName(env), encryption: QueueEncryption.SQS_MANAGED, enforceSSL: true,
+      retentionPeriod: Duration.days(4), visibilityTimeout: Duration.seconds(180),
+      deadLetterQueue: { queue: notificationDlq, maxReceiveCount: 5 }, removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+    })
+    const notificationLogs = new LogGroup(this, 'NotificationLogs', {
+      logGroupName: `/aws/lambda/${notificationName(env)}`, retention: RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+    })
+    const notificationWorker = new Function(this, 'NotificationWorker', {
+      functionName: notificationName(env), runtime: Runtime.NODEJS_24_X, architecture: Architecture.ARM_64,
+      handler: 'index.handler', code: Code.fromInline(readFileSync(new URL('../lambda/notification.cjs', import.meta.url), 'utf8')),
+      memorySize: 128, timeout: Duration.seconds(15), logGroup: notificationLogs,
+      environment: { ENVIRONMENT: env, NOTIFICATION_PARAMETER: notificationParameter(env) },
+      role: Role.fromRoleArn(this, 'NotificationRole', `arn:aws:iam::${p.account}:role/${notificationName(env)}`, { mutable: false }),
+    })
+    notificationWorker.addEventSource(new SqsEventSource(notificationQueue, { batchSize: 1, reportBatchItemFailures: true }))
+    new Alarm(this, 'NotificationDeadLettersAlarm', {
+      alarmName: `flat-girl-${env}-signup-notification-dead-letters`,
+      metric: notificationDlq.metricApproximateNumberOfMessagesVisible({ period: Duration.minutes(5) }),
+      threshold: 1, evaluationPeriods: 1, treatMissingData: TreatMissingData.NOT_BREACHING,
+    })
+    this.output('NotificationQueueUrl', notificationQueue.queueUrl)
     const fn = new Function(this, 'Subscribe', {
       functionName: names.function, runtime: Runtime.NODEJS_24_X, architecture: Architecture.ARM_64,
       handler: 'index.handler', code: Code.fromInline(lambdaCode('signup', env)),
@@ -68,6 +96,7 @@ export class Signup extends Base {
       environment: {
         META_ENVIRONMENT: env, META_QUEUE_URL: queue.queueUrl, SIGNUP_ENABLED: String(cfg.enabled), ALLOWED_ORIGIN: signupOrigin(env), BREVO_LIST_ID: String(cfg.listId),
         TURNSTILE_PARAMETER: signupParameters.turnstile, BREVO_PARAMETER: signupParameters.brevo,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl,
       },
     })
     const gateway = new api.HttpApi(this, 'Api', {
@@ -82,7 +111,7 @@ export class Signup extends Base {
     new ARecord(this, 'Dns', { zone, recordName: host,
       target: RecordTarget.fromAlias(new ApiGatewayv2DomainProperties(domain.regionalDomainName, domain.regionalHostedZoneId)) })
     const failures = new MetricFilter(this, 'ProviderFailures', {
-      logGroup: logs, filterPattern: FilterPattern.anyTerm('secrets_failed', 'turnstile_failed', 'brevo_failed'),
+      logGroup: logs, filterPattern: FilterPattern.anyTerm('secrets_failed', 'turnstile_failed', 'brevo_failed', 'notification_enqueue_failed'),
       metricNamespace: 'FlatGirl/Signup', metricName: `${env}-provider-failures`, metricValue: '1', defaultValue: 0,
     })
     new Alarm(this, 'ProviderFailureAlarm', { alarmName: `flat-girl-${env}-signup-provider-failures`,

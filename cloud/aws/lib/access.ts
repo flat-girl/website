@@ -1,15 +1,22 @@
 import { adminAccess } from './admin-access.js'
 import * as iam from 'aws-cdk-lib/aws-iam'
+import { EmailIdentity, Identity } from 'aws-cdk-lib/aws-ses'
+import { PublicHostedZone } from 'aws-cdk-lib/aws-route53'
 import type { Construct } from 'constructs'
 import { RemovalPolicy } from 'aws-cdk-lib'
 import { Base } from './stacks.js'
 import { bucketName, roleArn, stacks, type Config } from './config.js'
 import { metaParameters, edgeName, metaQueueName, metaWorkerName, eventTableName, edgeRouteName, betaAuthParameter } from './meta.js'
-import { signupNames, signupParameters } from './signup-config.js'
+import { signupNames, signupParameters, notificationParameter, notificationName } from './signup-config.js'
 
 export class Access extends Base {
   constructor(scope: Construct,p: Config) {
     super(scope,stacks.access,p,true)
+    // Merge equivalent IAM statements to keep this no-asset template under 51,200 bytes.
+    this.node.setContext('@aws-cdk/aws-iam:minimizePolicies', true)
+    const mailZone=PublicHostedZone.fromPublicHostedZoneAttributes(this,'MailZone',{hostedZoneId:p.hostedZoneId,zoneName:p.domain})
+    const senderIdentity=new EmailIdentity(this,'NotificationSender',{identity:Identity.publicHostedZone(mailZone)})
+    senderIdentity.applyRemovalPolicy(RemovalPolicy.RETAIN)
     let human: iam.User | undefined
     if (!p.operatorPrincipalArn) {
       human=new iam.User(this,'HumanOperator',{userName:'flat-girl-operator'})
@@ -71,6 +78,27 @@ export class Access extends Base {
       const meta=Object.values(metaParameters(env)).map(name=>`arn:aws:ssm:${p.region}:${p.account}:parameter${name}`)
       operator.addToPolicy(statement(['ssm:GetParameter','ssm:PutParameter'],meta))
       runtime.addToPolicy(statement(['ssm:GetParameter'],[...parameters,meta[0]]))
+      const notification=`arn:aws:ssm:${p.region}:${p.account}:parameter${notificationParameter(env)}`
+      const notificationRole=new iam.Role(this,`${env}NotificationRuntime`,{roleName:notificationName(env),assumedBy:new iam.ServicePrincipal('lambda.amazonaws.com')})
+      const notificationArn=`arn:aws:lambda:${p.region}:${p.account}:function:${notificationName(env)}`
+      const notificationLogs=`arn:aws:logs:${p.region}:${p.account}:log-group:/aws/lambda/${notificationName(env)}`
+      const notificationQueue=`arn:aws:sqs:${p.region}:${p.account}:${notificationName(env)}`
+      notificationRole.addToPolicy(statement(['ssm:GetParameter'],[notification]))
+      notificationRole.addToPolicy(statement(['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'],[notificationQueue]))
+      notificationRole.addToPolicy(statement(['logs:CreateLogStream','logs:PutLogEvents'],[`${notificationLogs}:*`]))
+      runtime.addToPolicy(statement(['sqs:SendMessage'],[notificationQueue]))
+      operator.addToPolicy(statement(['sqs:SendMessage'],[notificationQueue]))
+      operator.addToPolicy(statement(['ssm:GetParameter','ssm:PutParameter'],[notification]))
+      const sender=[`arn:aws:ses:${p.region}:${p.account}:identity/flatgirl.net`, `arn:aws:ses:${p.region}:${p.account}:identity/high@flatgirl.net`]
+      const mailConditions={StringEquals:{'ses:FromAddress':'high@flatgirl.net'},
+        'ForAllValues:StringEquals':{'ses:Recipients':['high@flatgirl.net']}}
+      notificationRole.addToPolicy(statement(['ses:SendRawEmail'],sender,mailConditions))
+      // The operator can send setup/test messages only to the same owner inbox.
+      if(env==='production') {
+        operator.addToPolicy(statement(['ses:SendRawEmail'],sender,mailConditions))
+        operator.addToPolicy(statement(['ses:GetEmailIdentity'],sender))
+        operator.addToPolicy(statement(['ses:GetAccount'],['*']))
+      }
       const edgeRole=new iam.Role(this,`${env}MetaEdgeRuntime`,{roleName:edgeName(env),
         assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
       const queueArn=`arn:aws:sqs:${p.region}:${p.account}:${metaQueueName(env)}`
@@ -88,19 +116,19 @@ export class Access extends Base {
         'dynamodb:DescribeTimeToLive','dynamodb:DescribeContributorInsights','dynamodb:DescribeKinesisStreamingDestination',
         'dynamodb:TagResource','dynamodb:UntagResource','dynamodb:ListTagsOfResource'],[eventsArn]))
       workerRole.addToPolicy(statement(['logs:CreateLogStream','logs:PutLogEvents'],[`${workerLogs}:*`]))
-      execution.addToPolicy(statement(['iam:PassRole'],[workerRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
+      execution.addToPolicy(statement(['iam:PassRole'],[workerRole.roleArn,notificationRole.roleArn],{StringEquals:{'iam:PassedToService':'lambda.amazonaws.com'}}))
       execution.addToPolicy(statement(['lambda:CreateFunction','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration',
-        'lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:TagResource','lambda:UntagResource','lambda:ListTags'],[workerArn,`${workerArn}:*`]))
-      execution.addToPolicy(statement(['lambda:CreateEventSourceMapping'],['*'],{ArnEquals:{'lambda:FunctionArn':workerArn}}))
+        'lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:TagResource','lambda:UntagResource','lambda:ListTags'],[workerArn,`${workerArn}:*`,notificationArn,`${notificationArn}:*`]))
+      execution.addToPolicy(statement(['lambda:CreateEventSourceMapping'],['*'],{ArnEquals:{'lambda:FunctionArn':[workerArn,notificationArn]}}))
       execution.addToPolicy(statement(['lambda:GetEventSourceMapping','lambda:UpdateEventSourceMapping','lambda:DeleteEventSourceMapping',
         'lambda:TagResource','lambda:UntagResource','lambda:ListTags'],[`arn:aws:lambda:${p.region}:${p.account}:event-source-mapping:*`]))
       execution.addToPolicy(statement(['sqs:CreateQueue','sqs:DeleteQueue','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:SetQueueAttributes',
-        'sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'],[queueArn,`${queueArn}-dlq`]))
+        'sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'],[queueArn,`${queueArn}-dlq`,notificationQueue,`${notificationQueue}-dlq`]))
       execution.addToPolicy(statement(['logs:CreateLogGroup','logs:DeleteLogGroup','logs:PutRetentionPolicy','logs:DeleteRetentionPolicy',
-        'logs:TagResource','logs:UntagResource','logs:ListTagsForResource','logs:TagLogGroup','logs:UntagLogGroup','logs:ListTagsLogGroup'],[workerLogs,`${workerLogs}:*`]))
-      operator.addToPolicy(statement(['sqs:GetQueueAttributes','sqs:GetQueueUrl'],[queueArn,`${queueArn}-dlq`]))
-      operator.addToPolicy(statement(['lambda:GetFunctionConfiguration'],[workerArn]))
-      operator.addToPolicy(statement(['logs:FilterLogEvents'],[`${workerLogs}:*`]))
+        'logs:TagResource','logs:UntagResource','logs:ListTagsForResource','logs:TagLogGroup','logs:UntagLogGroup','logs:ListTagsLogGroup'],[workerLogs,`${workerLogs}:*`,notificationLogs,`${notificationLogs}:*`]))
+      operator.addToPolicy(statement(['sqs:GetQueueAttributes','sqs:GetQueueUrl'],[queueArn,`${queueArn}-dlq`,notificationQueue,`${notificationQueue}-dlq`]))
+      operator.addToPolicy(statement(['lambda:GetFunctionConfiguration'],[workerArn,notificationArn]))
+      operator.addToPolicy(statement(['logs:FilterLogEvents'],[`${workerLogs}:*`,`${notificationLogs}:*`]))
       const routerRole=new iam.Role(this,`${env}EdgeRoutesRuntime`,{roleName:edgeRouteName(env),
         assumedBy:new iam.CompositePrincipal(new iam.ServicePrincipal('lambda.amazonaws.com'),new iam.ServicePrincipal('edgelambda.amazonaws.com'))})
       if(env==='beta') {
