@@ -167,3 +167,19 @@ roles. Beta's router alone reads `/flat-girl/beta/authorization-sha256`; product
 has no auth-read permission. The operator can copy the existing KVS digest into
 that SecureString using `beta-auth-migrate` and rotate both stores using `beta-auth`.
 Tracking roles keep queue-only access. Apply access before migration and site updates.
+
+## Subscriber notification access
+
+The SES notification change adds `flat-girl-{environment}-notification` worker
+roles, the `flatgirl.net` SES domain identity and three SES DKIM CNAME records.
+Existing Google/Brevo DNS records are preserved. Signup can only enqueue to its matching notification queue; it cannot
+send email. Each worker reads its own nonsecret notification settings, consumes
+its queue and sends from/to **high@flatgirl.net only**. It cannot read Brevo keys.
+The operator can configure these settings, check SES readiness, send owner-only
+thread seed emails and enqueue controlled worker tests. Existing sender and
+recipient restrictions also apply to operator email sends.
+
+Access-stack policies merge equivalent statements to stay within the existing
+51,200-byte inline template limit without granting asset-publication permissions.
+Apply the access stack before deploying the signup stacks. See
+[NOTIFICATIONS.md](NOTIFICATIONS.md) for the staged rollout.
