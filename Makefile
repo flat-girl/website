@@ -47,9 +47,9 @@ help:
 	  '' \
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
 	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
-	  'Meta: make meta-secrets/meta-config/meta-status/meta-test; see cloud/META.md.' \
-	  'Admin: make admin-build/admin-auth/admin-preflight/admin-publish/admin-verify/admin-rollback; see cloud/ADMIN.md.' \
-	  'See cloud/ACCESS.md and cloud/DEPLOYMENT.md for rollout order.'
+	  'Meta: make meta-secrets/meta-config/meta-status/meta-test; see docs/META.md.' \
+	  'Admin: make admin-build/admin-auth/admin-preflight/admin-publish/admin-verify/admin-rollback; see docs/ADMIN.md.' \
+	  'See docs/ACCESS.md and docs/DEPLOYMENT.md for rollout order.'
 
 cloud-preflight:
 	$(PYTHON) tools/cloud.py preflight $(profile) --read-only

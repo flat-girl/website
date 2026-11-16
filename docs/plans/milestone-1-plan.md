@@ -115,7 +115,7 @@ built output at phone/desktop widths; check both slides, keyboard controls,
 full-size links, and the no-JavaScript gallery. Confirm no raw PNGs or build
 metadata appear in the output and an unchanged image run does no resizing.
 
-Document the install/run commands and source-file prerequisite in README.
+Document the install/run commands and source-file prerequisite in [the development guide](../DEVELOPMENT.md).
 Record checks actually run and any remaining issues in the handoff.
 
 ## Done when
@@ -151,7 +151,7 @@ favicon to avoid that request.
 The sandbox required approved network access for dependencies and local server/
 Chrome execution. Local uv runs used `UV_CACHE_DIR=/tmp/flat-girl-uv-cache` because
 its default cache is outside the writable workspace. Ordinary user-run commands
-are documented in README. npm installation reported 6 low and 6 moderate
+are documented in [the development guide](../DEVELOPMENT.md). npm installation reported 6 low and 6 moderate
 transitive dependency advisories; no audit remediation was attempted in this step.
 
 AWS and GitHub have not been changed. The roadmap now specifies independent

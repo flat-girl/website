@@ -6,9 +6,11 @@ delivery and preserved unsubscribe status. Milestone 4 is implemented and checke
 locally; the user confirmed Meta accepted the manual regression events November 6.
 Beta and production are deployed; DynamoDB records and Meta acceptance are confirmed.
 Production edge failures exposed a short enqueue deadline; the local delivery fixes
-and per-event completion checkpoints have rollout instructions in META.md section 5.
+and per-event completion checkpoints have rollout instructions in the
+[delivery-fix workflow](../workflows/20261106_META_DELIVERY_FIXES.md).
 A subsequent local parity revision unifies beta/production viewer handlers and
-caching; migrate beta auth and deploy using META.md section 6. Milestones 5–6 are pending.
+caching; its password-preserving upgrade is recorded in the
+[shared-edge workflow](../workflows/20261106_SHARED_EDGE_MIGRATION.md). Milestones 5–6 are pending.
 This document is the cross-session summary; detailed implementation plans belong
 in their respective sessions. Milestone 2 included read-only AWS discovery;
 no infrastructure has been changed by the agent.
@@ -145,7 +147,7 @@ are explicitly deferred to milestone 6. No public production signup is implied.
 
 **Status:** complete November 5, 2026 after user-run rollout and live verification.
 See the [completion handoff](milestone-2-plan.md#live-completion-handoff--november-5-2026)
-and [operating runbook](../cloud/DEPLOYMENT.md). The user waived the live rollback
+and [operating runbook](../DEPLOYMENT.md). The user waived the live rollback
 drill and confirmed password rotation. Separate deployed resources establish beta
 independence; the live disable/re-enable drill was not observed.
 
@@ -192,7 +194,7 @@ Passing synthesis or IAM simulation alone is not deployment verification.
 The user verified real signup and welcome delivery on both environments, plus
 unsubscribe/re-submit preservation on beta. Deployed list settings and live API
 validation/CORS checks were independently confirmed.
-See the [signup runbook](../cloud/SIGNUP.md). Beta uses its own test list. The form has an explanatory blurb,
+See the [signup runbook](../SIGNUP.md). Beta uses its own test list. The form has an explanatory blurb,
 no consent checkbox, and no custom consent timestamps or wording-version tracking.
 Beta list **5** and production list **4** share provider keys and one Turnstile
 widget. Brevo owns the welcome email; the backend manages list membership only.
@@ -344,7 +346,7 @@ launch campaign remain separate operational work.
 4. At session end, update milestone status and a short handoff with changed files,
    exact checks/results, deployment evidence, unresolved decisions and next action.
    Mark local-ready and live-verified separately.
-5. Begin the next session with: **“Read docs/IMPLEMENTATION-PLAN.md and the latest
+5. Begin the next session with: **“Read docs/plans/IMPLEMENTATION-PLAN.md and the latest
    handoff. Make the detailed plan for milestone N. This session is planning only.”**
 
 ## Documentation references

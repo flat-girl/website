@@ -3,7 +3,7 @@
 The deployed implementation serves a static Nuxt/Tailwind dashboard at
 `admin.flatgirl.net`, backed by an independent read-only metrics service and one
 writable cache table. No campaign end date, Brevo access, scheduler, or production
-Nuxt server. The [implementation plan](../docs/admin-plan.md) defines measurement
+Nuxt server. The [implementation plan](plans/admin-plan.md) defines measurement
 semantics. Infrastructure and static publication completed November 8, 2026;
 authenticated end-to-end verification passed at 2:58 PM CST that day.
 The initial live check confirmed published bytes, authentication, direct-origin
@@ -59,6 +59,10 @@ uniques, retained in total views, and disclosed. This is not a matched conversio
 funnel. The rate uses the selected view-counting basis.
 
 The only writable table is `flat-girl-admin-cache` (plus execution-log writes).
+It uses DynamoDB's AWS-owned encryption key, with no account-level KMS request charges.
+The KMS reduction rollout was verified November 14, 2026: the existing cache table
+remained ACTIVE with its original creation date, and the user reported the manual
+production regression passed.
 Schema 3 stores immutable completed-hour counts and keyed fingerprints, a replaceable
 current-hour snapshot, durable query progress, DLQ attributes, and one global
 mutex. History is partitioned by environment/archive, UTC hour, and fingerprint
@@ -114,46 +118,14 @@ DynamoDB size counters are approximate. Assess large scans before rollout;
 50 items/page is deliberate to bound conditional transactions. The time index permits bounded source reads after the initial historical build.
 Wait for both indexes to become ACTIVE before deploying the indexed reader.
 
-## Incremental-refresh rollout (deployed November 8, 2026)
-
-The November 8 incremental-refresh change replaces repeated full scans with
-indexed time-range queries and durable completed-hour rollups. All 53 backend/infrastructure tests, TypeScript checking, and synthesis pass.
-The live diff confirms exactly two additive event-table indexes, one admin read
-policy change, and metrics Lambda code; no other resource changes. Review:
-`.deploy/admin/incremental-review.json`. Both indexes are now ACTIVE; the approved
-access and admin stack updates are deployed. Live verification at 9:07 PM CST
-confirmed that all four stack resource templates, the read policy, and the Lambda
-source match the reviewed changes. Public-site HTTP 200, signup preflight HTTP 204,
-and unauthenticated admin API HTTP 401 passed. Receipt:
-`.deploy/admin/incremental-verification-first.json`.
-
-The initial verification still found schema 2 snapshots because an authenticated
-refresh had not yet initialized schema 3. The first refresh performs that one-time
-build. Signed-in refresh behavior has local regression coverage; deployment checks
-alone do not establish live authenticated refresh success.
-
-1. Review and deploy `signup-beta` and `signup-production`; the intended changes
-   add only the `environment-time` index to each existing event table. It uses
-   existing `environment` and `event_time` attributes and projects only event
-   name, IP address, and user-agent (event ID is included automatically). No event
-   rewrite or primary-key replacement is needed. Wait for both indexes to be ACTIVE.
-2. Review `access`: replace the admin runtime's projected table Scan permission
-   with projected Query permission on those two specific indexes. Deploy this
-   immediately before `admin` to minimize the old reader's permission gap.
-3. Deploy `admin`: only metrics Lambda code changes. No static frontend release
-   is required. The first refresh initializes schema 3 once; subsequent refreshes
-   query only the unfinished interval. Verify a second refresh and hour rollover.
-
-Do not deploy unrelated pending changes in any stack. For rollback, restore the
-previous projected Scan permission before restoring the schema 2 Lambda. Leave
-the additive indexes in place; deleting an index is unnecessary for rollback.
-Do not purge source records or historical cache as a recovery step.
-
 ## Infrastructure and credential setup
 
+The historical [incremental-refresh migration](workflows/20261108_ADMIN_INCREMENTAL_REFRESH.md)
+records the index, permission, and cache-schema upgrade order and rollback steps.
+
 Use the established access administrator and operator profiles. Review these
-explicit stacks only; do not deploy all stacks. Existing pending beta/production
-edge migrations are unrelated and must not be included.
+explicit stacks only; do not deploy all stacks. Review any pending changes in
+other stacks separately.
 
 ```sh
 make cloud-diff PROFILE=default STACK=access

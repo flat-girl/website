@@ -392,7 +392,7 @@ security control implicitly.
 | Backend/infrastructure | `cloud/aws/lambda/signup.cjs`, new signup stack/config modules and tests; existing `bin/app.ts`, `lib/config.ts`, `lib/access.ts` | API behavior, resource isolation, permissions, synthesis |
 | Operator tools | `Makefile`, new `tools/signup.py`, `tools/aws_common.py`, `tools/cloud.py`, focused tests | Private secrets, provider/config preflight, status, enable/disable, stack registration |
 | Publication | `tools/deploy_site.py`, deployment tests, example signup configuration and ignore rules | Explicit build settings, environment rejection, manifest compatibility |
-| Documentation | `cloud/SIGNUP.md`, `cloud/ACCESS.md`, `cloud/DEPLOYMENT.md`, README and milestone plans | Provider setup, commands, rollout, failure recovery, observed evidence |
+| Documentation | `docs/SIGNUP.md`, `docs/ACCESS.md`, `docs/DEPLOYMENT.md`, README and milestone plans | Provider setup, commands, rollout, failure recovery, observed evidence |
 
 ## 8. Verification matrix
 
@@ -428,7 +428,7 @@ counts in the implementation handoff below; live provider checks remain separate
 ## 9. User-run rollout and completion
 
 **The signup commands below are implemented locally.** See
-[cloud/SIGNUP.md](../cloud/SIGNUP.md) for the rollout sequence.
+[docs/SIGNUP.md](../SIGNUP.md) for the rollout sequence.
 
 | Purpose | Proposed command | Effect |
 | --- | --- | --- |
@@ -492,7 +492,7 @@ hostnames, intended welcome automation, actual quotas, and account suppression
 behavior. CloudWatch alarms have no notification destination until one is configured.
 List IDs, public key, and the simple form are settled.
 
-**Original planning next action:** start the access review in [cloud/SIGNUP.md](../cloud/SIGNUP.md).
+**Original planning next action:** start the access review in [docs/SIGNUP.md](../SIGNUP.md).
 That rollout has since completed; see the completion handoff below.
 
 
@@ -547,7 +547,7 @@ Implementation details relevant to rollout:
 No AWS/provider changes, secret reads, emails, commits, or pushes were performed.
 The outstanding work is the user-run access/backend/site rollout, private secret
 entry, and real widget/list/suppression/welcome/recovery checks in
-[cloud/SIGNUP.md](../cloud/SIGNUP.md). Provider list-update behavior during a
+[docs/SIGNUP.md](../SIGNUP.md). Provider list-update behavior during a
 concurrent unsubscribe and account-specific consent-group configuration are not
 proven by mocks; verify those before public collection. Do not mark the overall
 milestone complete until the live acceptance criteria pass.
@@ -561,7 +561,7 @@ The agent checked the live AWS resource schemas for API, Stage, DomainName,
 ApiMapping, Integration, and Route; corrected Stage tagging/untagging and scoped
 domain certificate attachment/removal permissions; and added regression assertions.
 Signup logs now use `RetainExceptOnCreate` while retaining established logs on
-update/delete. The [signup runbook](../cloud/SIGNUP.md#recover-the-initial-beta-tagging-failure)
+update/delete. The [signup runbook](../workflows/20261105_BETA_SIGNUP_TAGGING_RECOVERY.md)
 contains the concrete user-run access update and one-time cleanup/retry commands.
 No recovery writes were executed by the agent. Live rollout was still pending
 at this correction; the completion record below supersedes that status.
@@ -604,7 +604,7 @@ contacts or trigger welcome emails.
 4. The form uses an email field and explanatory blurb, without a checkbox or
    custom consent history. Brevo owns welcome delivery; the backend only manages
    eligible list membership. Launch campaigns and sales activation remain separate.
-5. [cloud/SIGNUP.md](../cloud/SIGNUP.md) remains the operating runbook for secret
+5. [docs/SIGNUP.md](../SIGNUP.md) remains the operating runbook for secret
    rotation, health, enable/disable, publication, and recovery. The earlier failed
    first-deployment cleanup is historical and must not be repeated on these live stacks.
 
@@ -629,6 +629,6 @@ resolved Brevo's unknown-IP restriction. The closeout made documentation changes
 and non-mutating AWS/API checks only; no infrastructure changes, secret reads,
 contact mutations, emails, commits, or pushes were performed by the agent.
 
-**Next session:** read `docs/IMPLEMENTATION-PLAN.md` and this completion handoff;
+**Next session:** read `docs/plans/IMPLEMENTATION-PLAN.md` and this completion handoff;
 write the detailed milestone 4 plan for Meta Pixel and tracking consent before
 starting development. Final product design stays in milestone 6.

@@ -3,7 +3,7 @@
 Status: deployed November 8, 2026 at `https://admin.flatgirl.net`.
 The incremental-refresh correction below was deployed November 8, 2026.
 Latest authenticated live verification passed at 3:18 PM CST, including unique
-views, the launch cutoff, and Sarah’s icon. See `cloud/ADMIN.md` for operations.
+views, the launch cutoff, and Sarah’s icon. See `docs/ADMIN.md` for operations.
 
 Build a small static Nuxt dashboard in `admin/`, hosted at
 `https://admin.flatgirl.net`. DynamoDB is the source of truth. No Brevo integration
@@ -241,7 +241,7 @@ tooling; AWS propagation and live verification are additional.
    Tailwind `admin/` frontend with local fixture responses. Add admin stack/config,
    scoped access, and independent commands for
    credential setup, build, publish, verify, and rollback. Keep public-site publishing
-   paths unchanged. Document operations in `cloud/ADMIN.md`.
+   paths unchanged. Document operations in `docs/ADMIN.md`.
 3. Verify pagination, count/rate calculations, Chicago day/week boundaries,
    zero/partial periods, environment isolation, cache reuse after cold starts,
    lock contention/expiry/crash recovery, fenced publication, checkpoint retries,
@@ -384,7 +384,8 @@ Validation: 53 backend/infrastructure tests, TypeScript checking, and example/li
 configuration synthesis pass. Regression coverage includes a one-hour absence,
 same-hour replacement, eight-day absence with expired live cache, cross-refresh
 visitor deduplication, hidden staged history, lost checkpoint replies, and resumed
-snapshots older than one hour. Frontend behavior is unchanged. See cloud/ADMIN.md
+snapshots older than one hour. Frontend behavior is unchanged. See the
+[incremental-refresh workflow](../workflows/20261108_ADMIN_INCREMENTAL_REFRESH.md)
 for deployment order and the one-time schema 3 cache initialization.
 
 Deployment completed November 8, 2026. The user explicitly approved the two time

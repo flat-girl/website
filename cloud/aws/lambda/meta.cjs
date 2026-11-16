@@ -41,10 +41,14 @@ function buildEvent(name, env, input, now = Date.now()) {
     action_source: 'website', event_source_url: env === 'beta' ? 'https://beta.flatgirl.net/' : 'https://flatgirl.net/',
     user_data: user }
 }
+function validateCredentials(value) {
+  if (!/^\d{1,30}$/.test(value?.datasetId) || typeof value.accessToken !== 'string' ||
+      !value.accessToken || /\s/.test(value.accessToken)) throw new Error('credentials')
+  return value
+}
 async function deliver(event, config, credentials, signal, fetcher = fetch) {
   if (!userData({ agent: event?.user_data?.client_user_agent }).client_user_agent) throw new Error('user-agent')
-  if (!/^\d{1,30}$/.test(credentials?.datasetId) || typeof credentials.accessToken !== 'string' ||
-      !credentials.accessToken || /\s/.test(credentials.accessToken)) throw new Error('credentials')
+  validateCredentials(credentials)
   const body = JSON.stringify({ data: [event] })
   for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted()
@@ -73,6 +77,7 @@ async function deliver(event, config, credentials, signal, fetcher = fetch) {
 function createRuntime(env, deps = {}) {
   const names = parameterNames(env), now = deps.now || Date.now
   let cached, expires = 0, client, Command, sqs, SendMessage
+  let cachedCredentials
   const read = deps.read || (async (Name, signal) => {
     if (!client) {
       const sdk = require('@aws-sdk/client-ssm')
@@ -102,8 +107,8 @@ function createRuntime(env, deps = {}) {
     async deliver(event, config, signal) {
       if (config.mode === 'off' || !(event.event_name === 'Lead' ? config.leadEnabled : config.viewEnabled)) return
       // Credentials are independent of signup secrets and are not needed for skipped views.
-      const credentials = await read(names.credentials, signal)
-      await deliver(event, config, credentials, signal, deps.fetch || fetch)
+      cachedCredentials ||= validateCredentials(await read(names.credentials, signal))
+      await deliver(event, config, cachedCredentials, signal, deps.fetch || fetch)
       log(event.event_name === 'Lead' ? 'lead_delivered' : 'view_delivered')
     },
     async send(event, signal, email) {

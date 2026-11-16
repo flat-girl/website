@@ -39,7 +39,7 @@ export class Signup extends Base {
       retention: RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
     const events = new Table(this, 'Events', {
       tableName: eventTableName(env), partitionKey: { name: 'event_id', type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST, encryption: TableEncryption.AWS_MANAGED,
+      billingMode: BillingMode.PAY_PER_REQUEST, encryption: TableEncryption.DEFAULT,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
     })
