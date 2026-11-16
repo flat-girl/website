@@ -144,3 +144,39 @@ private release manifest; old milestone 2 manifests remain valid without them.
 Changing a flag/key requires a new site build. Backend disable is a separate
 stack update and stops provider writes from cached pages once it completes.
 Frontend rollback does not undo contacts or Brevo welcome emails.
+
+
+## Public-token commerce builds
+
+For the one-off beta signup/router cutover and first commerce publication, use
+[Beta Shopify commerce migration](workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md).
+That workflow owns prerequisites, ordered deployment commands, live verification,
+rollback rehearsal and completion status. The following describes reusable build
+and publication behavior.
+
+Release manifests now include `commerce`: environment, mode, Shopify source,
+public token, empty commerce endpoint and the two exact checkout hosts. Builds
+remove unchecked Nuxt public overrides and private Shopify variables, then compare
+the generated runtime on every HTML page with the manifest and destination's
+signup settings. Publication rechecks archived bytes/configuration, fixture and
+recognized private-token markers. Token validation is local; it does not prove a
+token is valid at Shopify or detect an arbitrary secret mislabeled as public.
+Only copy the **public** token from Headless. Older waitlist manifests without a
+commerce section remain eligible for rollback; commerce output without that
+section is rejected.
+
+Only the five known `policies/<handle>/index.html` and `_payload.json` paths are
+publishable. HTML/payloads keep the existing mutable cache policy (browser
+revalidation; shared cache 60 seconds); hashed assets remain immutable. The router
+redirects extensionless policy links to a trailing slash with query values intact,
+rewrites that path to the generated index, and supports explicit index/payload
+requests. Beta authentication happens before redirects/rewrites and cache access.
+Unknown policy paths return 404. The verification command checks policy bytes,
+cache, canonical links and unauthenticated beta access on both hostnames.
+
+A rollback restores old bytes without deleting retained objects or changing
+Shopify stock/publication. Older policy objects may remain reachable. Closing sales
+requires the Shopify procedure in [SHOPIFY.md](SHOPIFY.md#sales-controls-for-the-public-token-storefront),
+not only a waitlist artifact. Production launch is a separate Session 7 cutover;
+its ordered deployment and list-9 automation checks belong in a dedicated dated
+migration workflow before execution.

@@ -1,6 +1,6 @@
 # Shopify integration — session plan
 
-**Updated:** November 16, 2026. **Next:** Session 2, static deployment preparation.
+**Updated:** November 16, 2026. **Next:** Session 4, beta deployment and rehearsal.
 
 This is the current ecommerce plan. The user requested frontend work first so
 the design and purchase states can be iterated locally, followed by separate
@@ -12,19 +12,21 @@ No deployment has been performed as part of this implementation.
 ## Start a fresh session
 
 Read this document's current state, decisions, contracts, and the selected
-session. Read that session's listed source files and applicable AGENTS.md
-instructions. Use `git status` before editing; preserve existing changes.
+session. Read `docs/README.md`, `docs/workflows/README.md`, that session's listed
+source files and applicable AGENTS.md instructions. One-off deployment steps belong
+in a dated migration workflow; link its commands and status from this plan. Use `git status` before editing; preserve existing changes.
 Do not reread every historical milestone plan or redo the completed API proof.
 Work on the selected session only, update its handoff, and leave a specific
 next action. If a session needs splitting, record the boundary and remaining work.
 
 Copy this for the next session:
 
-> Implement Session 2 in docs/plans/shopify-integration-plan.md, using the Session 1
-> handoff and shared types. Prepare public-token static commerce builds, artifact
-> validation, and policy route support in the publisher and edge router. Document
-> Shopify-side purchase controls. Preserve existing signup and hosting; no custom
-> commerce backend is needed. Run local checks and update the handoff. Do not deploy.
+> Execute Session 4 in docs/plans/shopify-integration-plan.md using the implementation
+> handoffs and docs/workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md.
+> Sold-out signup reuses the existing endpoint: beta list 10, production
+> list 9. Deploy the policy router and public-token commerce artifact to beta,
+> then rehearse checkout, policy links and signup. Preserve production until
+> its deliberate rollout. Review the documented Shopify checks before testing.
 
 For subsequent sessions, replace the session number and use its scope below.
 Plans describe intended work; they are not evidence that it is deployed.
@@ -46,7 +48,7 @@ Plans describe intended work; they are not evidence that it is deployed.
 | Order-status verification | Access from the email link in a fresh/private browser is not yet explicitly confirmed |
 | Payments | Owner enabled test mode; recheck actual setting before each live test and launch |
 | Local commands | `make shopify-check` reads product; `make shopify-test` creates one-unit cart and opens checkout; private token prompt, no saved credential |
-| Brevo | Launch lists beta **5**, production **4**; sold-out list IDs not created/recorded |
+| Brevo | Configured beta **10**, production **9**, shared by launch/sold-out forms; list changes not deployed |
 | Meta | Existing edge `ViewContent` and signup `Lead` CAPI pipeline; no implemented purchase sender in that pipeline |
 | Domains | `checkout.flatgirl.net`, `shopify.flatgirl.net`, and separate `account.flatgirl.net` are proposals, not completed configuration |
 
@@ -68,8 +70,8 @@ uncommitted. Treat them as existing work, not generated files to discard.
    Shopify owns pricing, stock enforcement, checkout, payments, orders, order
    emails, and hosted order/account pages. No local cart drawer, customer login,
    Customer Account API, or payment collection in our frontend.
-3. Keep Brevo launch subscriptions and add a distinct sold-out audience. The
-   owner manually sends restock/next-drop campaigns. No Brevo product sync,
+3. Reuse the existing Brevo signup flow for launch and sold-out visitors, with
+   beta list **10** and production list **9**. The owner manually sends campaigns. No Brevo product sync,
    restock automation, Shopify waitlist app, or new email engine.
 4. Build and review locally, integrate on beta, then deliberately launch
    production. Preserve the waitlist path and archived production artifact.
@@ -95,14 +97,14 @@ operator availability. If a section grows, split it rather than expand its scope
 | Session | Outcome | Dependencies | Estimate | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Local purchase UI, policy pages and deterministic mocks | Existing frontend | 5–7 hours | Implemented locally; ready for review |
-| 2 | Static deployment preparation, checked locally | Session 1 public-token frontend | 1–3 hours | **Next** |
-| 3 | Sold-out Brevo signup and local integration | Session 1 signup contract | 2–3 hours | Not started |
+| 2 | Static deployment preparation, checked locally | Session 1 public-token frontend | 1–3 hours | Implemented locally; no deployment |
+| 3 | Reuse existing signup for sold-out visitors | Existing signup service | Small configuration/UI change | Implemented locally; separate-audience proposal dropped |
 
 ### Verify and launch
 
 | Session | Outcome | Dependencies | Estimate | Status |
 | --- | --- | --- | --- | --- |
-| 4 | Beta deployment and full purchase/signup rehearsal | 1–3 | 2–4 hours | Not started |
+| 4 | Beta deployment and full purchase/signup rehearsal | 1–3 | 2–4 hours | **Next** |
 | 5 | Branded checkout/accounts and return navigation | Working beta; domain decision | 1–2 hours plus DNS | Not started |
 | 6 | Verified Meta and TikTok website purchase attribution | Working checkout, preferably final domains | 2–4 hours | Not started |
 | 7 | Production launch and rollback rehearsal | 4–6; explicit deferrals recorded | 1–2 hours | Not started |
@@ -126,7 +128,7 @@ flowchart LR
   Visitor --> Checkout[Shopify hosted checkout]
   Checkout --> Account[Shopify order status and accounts]
   Visitor --> Signup[Existing signup API and Lambda]
-  Signup --> Brevo[Launch or sold-out Brevo list]
+  Signup --> Brevo[Configured list: beta 10 / production 9]
   Dev[Local Nuxt development] --> Mocks[Local commerce and signup mocks]
 ```
 
@@ -143,9 +145,9 @@ or `commerce`. Session 1 can default **development only** to mocked commerce.
 Use a narrow service/composable boundary so mocks and live endpoints share types
 and components. Local scenario selection must have no effect in published builds.
 
-Session 2 must remove the current requirement for `FLAT_GIRL_COMMERCE_ENDPOINT`
-when a public Storefront token is configured. That build guard is still present.
-The public token is intentionally included in the static artifact; private
+Session 2 replaced the backend-URL build requirement with public-token validation.
+Static commerce requires `NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN` and an empty
+commerce endpoint. The public token is intentionally included in the artifact; private
 Storefront/Admin tokens must never be included. The adapter currently reports
 `salesOpen: true` in Shopify mode; waitlist mode is presentation, not a sales lock.
 
@@ -179,9 +181,9 @@ Product response:
 }
 ```
 
-`quantityLimit: 5` is the owner-approved UI cap. If it must be a hard purchase
-limit, verify and configure enforcement in Shopify before launch. Browser checks
-can be bypassed; a custom proxy would not prevent direct public-token requests.
+`quantityLimit: 5` is the owner-approved UI cap. The owner explicitly accepts
+bypass (November 16, Session 2); hard quantity enforcement is not required for
+launch. Browser checks can be bypassed; no quantity-enforcement backend is planned.
 `quantityAvailable` is the sellable online quantity or `null` when unavailable;
 327 is only a local fixture, never a production fallback. The edition size is 500. Use decimal strings or minor units for
 money, not floating-point price comparisons. The initial market is US/USD as
@@ -237,26 +239,20 @@ whether sold-out copy promises only a possible restock or includes future drops.
 
 ### Signup compatibility
 
-Extend `/subscribe` with a bounded `purpose: "launch" | "sold_out"` field.
-Missing purpose means `launch` so old cached pages keep working. Existing fields
-remain `email`, `turnstileToken`, and the empty honeypot `website`. Keep the same
-public acknowledgment for new, existing, or suppressed contacts.
+Launch and sold-out forms use the existing `/subscribe` contract: `email`,
+`turnstileToken`, and the empty honeypot `website`. No `purpose` field and no
+browser-selected list ID. Both use the configured signup endpoint and the same
+acknowledgment, suppression/duplicate checks, notifications and Meta Lead behavior.
 
-The currently deployed handler rejects extra request fields. Until the Session 3
-backend is deployed, launch submissions must keep omitting `purpose`; only the
-local mock may accept it during Session 1. Do not enable real sold-out submissions
-until the matching backend and list mapping exist. This keeps a routine waitlist
-build from breaking the existing signup service between sessions.
+Owner decision, November 16: use **betaSoldOutList (10)** and production
+**SoldOutList (9)** for the sold-out rollout. These replace the earlier IDs. This is one configured list
+per environment, shared by both forms; no separate audience-routing backend.
+The frontend's production-only sold-out disable guard has been removed.
 
-Resolve purpose to list ID on the server; never accept an arbitrary Brevo list
-ID from the browser. Existing launch lists remain beta 5 and production 4.
-New beta and production sold-out list IDs must be explicitly configured.
-Reusing one Brevo account still shares contacts and global suppression.
-
-An eligible launch-list member can join the sold-out list without recreating
-their contact. Preserve global/list suppression, unrelated memberships, consent
-group handling, and duplicate protections. Do not subscribe a buyer simply
-because they checked out, or send the launch welcome workflow to sold-out signups.
+The previously deployed configuration targeted beta 5 and production 4. Changes
+to beta 10 and production 9 are local until the respective signup stacks deploy. Existing list memberships are not migrated.
+Confirm the intended list-9/list-10 welcome automations during rollout; do not subscribe
+buyers merely because they checked out.
 
 ## Session 1 — local storefront UI first
 
@@ -337,10 +333,10 @@ shipping/Christmas copy, edition size and parent signup copy. `SignupForm` takes
 `title`, `description`, `buttonLabel`, `successMessage`, `privacyText`, `endpoint`,
 `siteKey`, optional `extraFields`, `enabled` and `unavailableMessage`. It has no
 purpose enum or conditional launch/sold-out copy. Parents choose the copy and
-request metadata. Launch requests omit purpose; local sold-out requests pass
-`extraFields: { purpose: 'sold_out' }`. Mandatory email/token/honeypot fields
-cannot be replaced by extra fields. Published sold-out submission stays disabled
-until Session 3 is connected. Backend purpose-to-list validation remains required.
+request metadata. Mandatory email/token/honeypot fields cannot be replaced by
+extra fields. The original local-only sold-out purpose field and publication
+disable guard were removed by the Session 3 simplification: both forms now send
+the existing three-field request to the same signup endpoint.
 
 **Implementation:** `PurchasePanel.vue`, `useCommerce.ts`, `utils/commerce.ts`,
 `shared/types/commerce.ts`, `pages/index.vue`, `SiteFooter.vue`, and
@@ -389,7 +385,7 @@ redirects before beta. References:
 [Shop](https://shopify.dev/docs/api/storefront/latest/objects/Shop),
 [ShopPolicy](https://shopify.dev/docs/api/storefront/latest/objects/ShopPolicy).
 
-**Session 2 dependencies added by policy routes:** `tools/deploy_site.py` currently
+**Historical Session 1 dependency (resolved locally in Session 2):** `tools/deploy_site.py` currently
 rejects the new generated policy HTML/payload paths, and
 `cloud/aws/lambda/edge-router.cjs` redirects extensionless paths to `/`.
 Allow only the known policy output paths and map their URLs to the generated
@@ -553,59 +549,89 @@ but leave rollout and real customer-flow verification to Session 4.
 results, deployment/rollback commands, and Shopify-side control decisions or
 unresolved requirements. No deployment in this session.
 
-## Session 3 — sold-out Brevo audience
 
-**Outcome:** the existing signup service supports separate launch and sold-out
-audiences without introducing product-alert automation.
+### Session 2 implementation handoff — November 16, 2026
 
-**Read:** Session 1 signup contract; `docs/SIGNUP.md`, `docs/NOTIFICATIONS.md`,
-`cloud/signup.json`, `cloud/aws/lib/signup-config.ts`,
-`cloud/aws/lambda/signup.cjs`, notification worker, `tools/signup.py`,
-`tools/check_signup.py`, signup infrastructure/browser/operator tests.
+Implemented locally; no deployment, live carts/orders, Shopify setting changes,
+AWS commerce service or new IAM permissions. The subsequent signup simplification
+is recorded in Session 3; Session 4 is next.
 
-**Implement:**
+**Build and artifact behavior:** `FLAT_GIRL_STOREFRONT_MODE=commerce` plus
+`NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN` builds without a commerce endpoint.
+Waitlist remains the generated default. Local private-token development remains
+available; failed public requests never fall back. Nuxt checks mode/source/token,
+checkout hosts and runtime overrides. `tools/commerce_build.py` supplies checked
+publisher settings, strips private/unchecked public environment variables, and
+validates generated HTML runtime values against the release manifest. Publisher
+builds bypass `web/.env`. New manifests record the public commerce settings and
+require matching signup/environment settings; private-token/fixture markers and
+obvious placeholder tokens are rejected. Validation does not authenticate tokens
+at Shopify or identify arbitrary secrets mislabeled as public.
 
-1. Configure distinct beta/production sold-out lists once actual IDs are supplied.
-   Use visibly invalid/unset configuration until then, not guessed IDs. Keep live
-   sold-out collection disabled while its destination is missing.
-2. Implement the backward-compatible purpose field and server-side list mapping.
-   Refactor existing hardcoded 5/4 assumptions across runtime, tools, build
-   validation, and tests without changing launch-list behavior.
-3. Preserve suppression/duplicate behavior. Test new contact, existing launch
-   subscriber, existing sold-out subscriber, suppressed contact, invalid token,
-   unknown purpose, provider timeout, and legacy requests without purpose.
-4. Decide explicitly how a successful sold-out membership affects owner SES
-   notifications and Meta Lead counts. Prefer audience-aware labels and one
-   event per successful new target membership; confirm this metric definition.
-   Version queue payloads compatibly if they change, and keep failure delivery
-   decoupled from successful signup. Do not silently inflate unique-person metrics.
-5. Update frontend copy, local mocks, runbook, and tests. Confirm in Brevo that
-   adding this membership does not trigger the existing launch welcome email.
-   The owner controls campaigns; this session does not send a restock campaign.
+**Policy routes and rollback:** the publisher accepts only the five known policy
+HTML/payload pairs, using the existing mutable cache policy. The shared edge router
+authenticates beta first, canonicalizes policy links to a trailing slash, preserves
+queries and rewrites to each index document. Explicit HTML/payload requests work;
+unknown policy paths fail. Verification now probes policy routes/cache and beta
+auth. Existing redirects and archived waitlist restoration pass local checks.
+Old objects remain retained during rollback, including any earlier policy files.
+Deploy the router update with the beta stack before publishing the new artifact.
 
-**Done when:** both purposes pass local tests; old forms work; an existing launch
-subscriber can express sold-out interest; suppression is preserved. Actual Brevo
-delivery/list checks remain pending until Session 4 if no live setup occurred.
+**Owner decision:** five is a UI convenience; bypass is acceptable. Hard quantity
+enforcement is not a launch requirement. Inventory/overselling and existing-checkout
+closure still need Shopify-side verification. The intended opening/closure/reopening
+procedure is in [SHOPIFY.md](../SHOPIFY.md#sales-controls-for-the-public-token-storefront).
+The actual store configuration was not inspected or changed in this session.
 
-**Checks:** relevant signup unit/infrastructure/Python tests and
-`npm run test:signup --prefix web`, plus dev/browser coverage for both purposes.
+**Checks:** web typecheck; waitlist and public-token commerce generation; five
+negative Nuxt build configurations; 18 Python artifact/publisher/rollback tests;
+21 offline adapter/policy tests; `npm run check --prefix cloud/aws` (63 tests plus
+typecheck and example synthesis); seven generated-commerce browser checks with
+all Shopify traffic intercepted. Generated output was scanned for a private-token
+canary and fixture markers. Waitlist browser run: 18 passed, six commerce-only
+checks skipped, and the existing desktop photo-viewer initial-size assertion
+failed once; its focused rerun passed without code changes. No carousel/viewer
+implementation was changed.
 
-**Handoff:** list IDs or missing inputs, automation configuration, notification/
-Lead semantics, regression evidence, and required beta rollout steps.
+**Commands:** [DEVELOPMENT.md](../DEVELOPMENT.md#local-commerce-preview) has local
+intercepted builds/tests; [beta migration workflow](../workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md)
+has beta router/build/publish/verify/rollback commands. Final local output is default
+waitlist, with test credentials/settings removed. Real beta checkout, signup delivery,
+payment mode and fresh-browser order status remain Session 4 checks.
+
+Next action: beta rehearsal (Session 4), after the signup simplification below.
+
+## Session 3 — reuse existing signup (implemented locally)
+
+The separate launch/sold-out audience proposal is superseded by the owner's
+November 16 instruction: **beta 10, production 9**. No purpose field, extra API,
+separate sold-out lists or new notification semantics are needed.
+
+Updated `cloud/signup.json`, the runtime/config/operator/build list checks and
+existing tests to accept production 9 and beta 10. Both launch and
+sold-out UI submit the existing three-field request. The sold-out form is enabled
+in generated builds. Both signup-stack updates and the lists' welcome-automation
+verification remain rollout steps; no deployment, Brevo membership changes or
+emails were performed here.
+
+Checks: signup/publisher Python tests, web typecheck, AWS checks and generated
+commerce browser coverage, including a successful intercepted sold-out signup
+with no `purpose` or list ID in the request. See DEVELOPMENT.md for the test build.
 
 ## Session 4 — beta wiring and end-to-end rehearsal
 
 **Outcome:** the actual beta page reaches Shopify checkout and the correct Brevo
 audiences, while production continues to serve the waitlist.
 
-**Read:** handoffs 1–3, `docs/ACCESS.md`, `docs/DEPLOYMENT.md`, `docs/SHOPIFY.md`,
+**Read:** [beta migration workflow](../workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md),
+handoffs 1–3, `docs/ACCESS.md`, `docs/DEPLOYMENT.md`, `docs/SHOPIFY.md`,
 `docs/SIGNUP.md`, current environment configuration and deployment manifests.
 
 **Execute:**
 
 1. Verify account/profile, Shopify product/variant/market, public Storefront token,
    test payment setting and controlled email recipients. Deploy the prepared
-   policy routing and required signup changes in the established order. Beta
+   policy routing and the beta signup list-10 change in the established order. Beta
    Basic Auth protects the website, not direct Shopify API access; a public token
    is intentionally visible. Do not invent a private commerce API to protect it.
 2. Build and publish commerce mode to beta only. Validate direct Shopify requests,
@@ -742,7 +768,7 @@ the actual launch, linked from `docs/workflows/README.md`.
    it from historical November/Black Friday copy. Clean committed source is an
    existing production-build requirement; do not commit unrelated changes.
 2. Prepare production public-token build configuration, signup service settings
-   and real sold-out list IDs. Keep purchases closed using the verified Shopify
+   and the configured signup destinations (beta 10, production 9). Keep purchases closed using the verified Shopify
    procedure. Confirm existing monitoring has an actionable destination and
    configuration matches the production artifact. Disable beta purchase testing
    against the shared store at cutover; hiding beta UI does not isolate Shopify.
@@ -792,7 +818,7 @@ Otherwise retain the explicit blocker/status without delaying unrelated site wor
 | --- | --- | --- |
 | Final checkout/account hostname | Session 5 | Current myshopify checkout; no invented account link |
 | Public Storefront token in deployment configuration | Session 2 build; Session 4 beta | Owner reports local access working; no private-token AWS storage needed |
-| Sold-out list IDs and audience wording | Session 3 live setup | Mock purpose; no external writes |
+| Signup lists and sold-out wording | Session 4 / production rollout | Beta 5, production 9 configured locally; existing request reused; no external writes |
 | Per-order quantity cap and allowed destinations | Session 4 | Fixture cap 5; US/USD |
 | Launch time, delivery promise, policies, and payment readiness | Session 7 | Preserve known facts; no invented deadlines |
 

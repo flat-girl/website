@@ -24,6 +24,7 @@ from image_plan import IMMUTABLE,digest
 from prepare_images import ROOT,sha256,write_json
 from remote_images import ensure,destinations,remote_variant,immutable_upload,checksum64
 from signup import config as signup_config, public_settings, validate_public, build_environment
+import commerce_build
 
 MUTABLE='public, max-age=0, s-maxage=60, must-revalidate'
 ROOT_FILES={'index.html','200.html','404.html','_payload.json','robots.txt','build.json','favicon.ico','favicon.svg','sitemap.xml'}
@@ -34,7 +35,7 @@ TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8'
 def classify(key):
     parts=Path(key).parts
     if not parts or key.startswith('/') or '\\' in key or any(p.startswith('.') for p in parts):raise ValueError(f'Unsafe output path: {key}')
-    if key not in ROOT_FILES and not key.startswith('_nuxt/'):
+    if key not in ROOT_FILES and key not in commerce_build.POLICY_FILES and not key.startswith('_nuxt/'):
         raise ValueError(f'Unrecognized public file: {key}')
     suffix=Path(key).suffix
     if suffix not in TYPES:raise ValueError(f'Unrecognized content type: {key}')
@@ -72,6 +73,12 @@ def validate_artifact(directory,env,p):
     if files!=manifest.get('files') or digest(files)!=manifest.get('artifactDigest'):raise ValueError('Artifact files differ from manifest')
     if manifest.get('imageOrigin')!=manifest.get('images',{}).get('origin'):raise ValueError('Artifact image origin differs')
     if 'signup' in manifest:validate_public(manifest['signup'],env)
+    if 'commerce' in manifest:
+        commerce_build.validate_public(manifest['commerce'],env)
+        if 'signup' not in manifest:raise ValueError('Static commerce artifact requires checked signup settings')
+    commerce_build.validate_output(directory/'public',manifest.get('commerce'),env,manifest.get('signup'))
+    if 'commerce' in manifest and (manifest.get('siteUrl')!='https://'+('beta.' if env=='beta' else '')+p['domain'] or env=='beta' and manifest.get('noindex') is not True):
+        raise ValueError('Commerce artifact site URL/noindex differs from destination')
     return manifest
 
 def verify_images(aws,receipt):
@@ -87,6 +94,7 @@ def verify_images(aws,receipt):
         if remote_variant(aws,out['VariantsBucketName'],entry)!=obj:raise ValueError(f'Archived image missing or changed: {key}')
 
 def build(aws,env):
+    commerce=commerce_build.public_settings(os.environ,env)
     out=destination(aws,env)
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     dirty=bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip())
@@ -99,18 +107,20 @@ def build(aws,env):
     signup=public_settings(signup_config(),env)
     if signup['enabled']:
         service=aws.outputs('signup-'+env)
-        if service.get('SignupEndpoint')!=signup['endpoint'] or service.get('SignupEnabled')!='true' or service.get('BrevoListId')!=str(5 if env=='beta' else 4):
+        if service.get('SignupEndpoint')!=signup['endpoint'] or service.get('SignupEnabled')!='true' or service.get('BrevoListId')!=str(10 if env=='beta' else 9):
             raise ValueError('Enable and verify the matching signup backend before building the enabled form')
     settings=build_environment(dict(os.environ,FLAT_GIRL_IMAGE_MODE='cdn',FLAT_GIRL_NOINDEX=str(noindex).lower()),signup)
-    subprocess.run(['npm','run','generate','--prefix','web'],cwd=ROOT,env=settings,check=True)
+    settings=commerce_build.build_environment(settings,commerce)
+    subprocess.run(['npm','run','generate','--prefix','web','--','--dotenv','/dev/null'],cwd=ROOT,env=settings,check=True)
     public=output/'public'
+    commerce_build.validate_output(public,commerce,env,signup,private_values=[v for k,v in os.environ.items() if 'TOKEN' in k and 'PUBLIC' not in k])
     (public/'robots.txt').write_text('User-agent: *\nDisallow: /\n' if noindex else 'User-agent: *\nAllow: /\n')
     files=file_manifest(public)
     release=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+digest(files)[:12]
     write_json(public/'build.json',dict(release=release,environment=env,revision=revision,dirty=dirty))
     files=file_manifest(public)
     manifest=dict(version=1,release=release,environment=env,account=aws.p['account'],siteUrl=out['SiteUrl'],revision=revision,dirty=dirty,
-                  noindex=noindex,imageOrigin=receipt['origin'],images=receipt,signup=signup,files=files,artifactDigest=digest(files))
+                  noindex=noindex,imageOrigin=receipt['origin'],images=receipt,signup=signup,commerce=commerce,files=files,artifactDigest=digest(files))
     target=release_dir(env,release)
     if target.exists():raise ValueError('Release directory already exists')
     target.mkdir(parents=True)
@@ -236,6 +246,7 @@ def verify(aws,env,directory):
     auth=beta_login() if env=='beta' else None
     if env=='beta':
         paths=['/','/'+next(f['key'] for f in manifest['files'] if f['key'].startswith('_nuxt/'))]
+        paths += ['/'+f['key'].removesuffix('index.html') for f in manifest['files'] if f['key'] in commerce_build.POLICY_FILES]
         for base in [origin,'https://'+out['DistributionDomainName']]:
             for path in paths:
                 status,headers,_=request(base+path)
@@ -248,6 +259,13 @@ def verify(aws,env,directory):
         cache=headers.get('Cache-Control','')
         if cache!=entry['cacheControl']:raise ValueError(f'Cache policy differs: {path}')
         if manifest['noindex'] and 'noindex' not in headers.get('X-Robots-Tag',''):raise ValueError(f'Missing noindex header: {path}')
+        if entry['key'] in commerce_build.POLICY_FILES and entry['key'].endswith('/index.html'):
+            route='/'+entry['key'].removesuffix('index.html')
+            status,headers,data=request(origin+route,auth)
+            if status!=200 or sha256(data)!=entry['sha256'] or headers.get('Cache-Control')!=entry['cacheControl']:
+                raise ValueError(f'Policy route bytes/cache differ: {route}')
+            status,headers,_=request(origin+route.rstrip('/')+'?x=1&x=2',auth)
+            check_redirect(origin+route.rstrip('/'),status,headers.get('Location'),301,origin+route+'?x=1&x=2')
     for key,obj in manifest['images']['objects'].items():
         status,headers,data=request(manifest['imageOrigin']+'/'+key)
         content_type = 'image/png' if key.endswith('.png') else 'image/webp'

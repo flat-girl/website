@@ -20,9 +20,7 @@ if (env.FLAT_GIRL_COMMERCE_ENDPOINT) {
     throw new Error('Published commerce endpoints must use a remote HTTPS URL')
   }
 }
-if (env.FLAT_GIRL_STOREFRONT_MODE === 'commerce' && !env.FLAT_GIRL_COMMERCE_ENDPOINT) {
-  throw new Error('Commerce builds require FLAT_GIRL_COMMERCE_ENDPOINT')
-}
+const checkoutHosts = 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com'
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-11-05',
@@ -38,7 +36,7 @@ export default defineNuxtConfig({
       // Only the PUBLIC Storefront token may be exposed to the browser.
       shopifyStorefrontPublicToken: env.NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN || '',
       commerceEndpoint: env.FLAT_GIRL_COMMERCE_ENDPOINT || '',
-      checkoutHosts: 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com',
+      checkoutHosts,
     },
   },
   $development: {
@@ -71,6 +69,24 @@ export default defineNuxtConfig({
     // Local API mocks run in dev; deployments contain only static assets.
     preset: 'static',
     prerender: { crawlLinks: false, failOnError: true, routes: ['/', ...policyLinks.map(p => `/policies/${p.handle}/`)] },
+  },
+  hooks: {
+    'nitro:config'(config) {
+      if (config.dev) return
+      // Check Nuxt overrides too: static hosting cannot supply a private fallback.
+      const mode = env.NUXT_PUBLIC_STOREFRONT_MODE ?? env.FLAT_GIRL_STOREFRONT_MODE ?? 'waitlist'
+      const token = env.NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN || ''
+      if (!['waitlist', 'commerce'].includes(mode)
+        || (env.NUXT_PUBLIC_COMMERCE_SOURCE ?? 'shopify') !== 'shopify'
+        || (env.NUXT_PUBLIC_COMMERCE_ENDPOINT ?? env.FLAT_GIRL_COMMERCE_ENDPOINT ?? '') !== ''
+        || (env.NUXT_PUBLIC_CHECKOUT_HOSTS ?? checkoutHosts) !== checkoutHosts) {
+        throw new Error('Static storefronts require Shopify public access and the configured checkout hosts; no commerce endpoint')
+      }
+      if ((mode === 'commerce' && !token) || (token && (!/^[a-zA-Z0-9_-]{16,256}$/.test(token)
+        || /^shp/i.test(token) || token === env.NUXT_SHOPIFY_STOREFRONT_TOKEN))) {
+        throw new Error('Commerce builds require a public Storefront token; private/Admin tokens are not publishable')
+      }
+    },
   },
   typescript: { strict: true },
 })

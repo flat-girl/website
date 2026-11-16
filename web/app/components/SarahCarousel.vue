@@ -27,6 +27,12 @@ let idleId: number | undefined
 let backgroundTimer: number | undefined
 const pendingPreloads = new Set<() => void>()
 
+// Keep the full gallery available without JavaScript. With JavaScript enabled,
+// v-show hides inactive photos in the initial HTML, before CSS or hydration.
+useHead({
+  noscript: [{ innerHTML: '<style>.carousel figure { display: block !important; }</style>' }],
+})
+
 function preload(image: typeof images[number], fullSize: boolean) {
   return new Promise<void>(resolve => {
     const preloadImage = new Image()
@@ -103,7 +109,7 @@ function move(offset: number) {
 <template>
   <section ref="carousel" aria-label="Product photos" class="carousel">
     <div v-for="(image, index) in images" :key="image.id">
-      <figure v-show="!ready || index === active">
+      <figure v-show="index === active">
         <img
           :src="image.src" :srcset="image.srcset" :sizes="image.sizes"
           :width="image.width" :height="image.height" :alt="image.alt"

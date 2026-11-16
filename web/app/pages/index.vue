@@ -8,8 +8,6 @@ const commerce = computed(() => import.meta.dev && config.commerceSource === 'lo
 const { product, quantity, maxQuantity, state, submitting, message, refresh, buy } = useCommerce(commerce)
 const signupCopy = computed(() => state.value === 'sold-out' ? soldOutSignup
   : state.value === 'closed' ? launchSignup : null)
-const signupFields = computed((): Record<string, string> => import.meta.dev && state.value === 'sold-out' ? { purpose: 'sold_out' } : {})
-const signupEnabled = computed(() => state.value !== 'sold-out' || import.meta.dev)
 const commerceRegion = ref<HTMLElement>()
 watch(state, async (next, previous) => {
   if (previous !== 'available' || !['sold-out', 'closed', 'failed'].includes(next)) return
@@ -30,7 +28,6 @@ watch(state, async (next, previous) => {
         :product="product.product" :max-quantity="maxQuantity" :submitting="submitting" @buy="buy" />
       <SignupForm v-if="signupCopy" :key="state" v-bind="signupCopy"
         :endpoint="config.signupEndpoint" :site-key="config.turnstileSiteKey"
-        :extra-fields="signupFields" :enabled="signupEnabled"
         unavailable-message="Email updates aren't available just yet. Please check back." />
       <p v-if="commerce" role="status" class="purchase-message">{{ message }}</p>
       <button v-if="state === 'failed'" type="button" class="retry" @click="refresh()">Try again? 🥺👉👈</button>

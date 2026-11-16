@@ -14,6 +14,28 @@ const photoNames = [
   'FlatGirl ShootA Outside02',
 ]
 
+test('only the first photo is visible while scripts and styles are delayed', async ({ page }) => {
+  let release = () => {}
+  const pending = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/_nuxt/**', async route => {
+    if (['script', 'stylesheet'].includes(route.request().resourceType())) await pending
+    await route.fallback()
+  })
+  try {
+    await page.goto('/', { waitUntil: 'commit' })
+    const carousel = page.getByRole('region', { name: 'Product photos' })
+    await expect(carousel.locator('img')).toHaveCount(10)
+    await expect(carousel.locator('img:visible')).toHaveCount(1)
+    await expect(carousel.getByAltText(photoNames[0]!)).toBeVisible()
+    await expect(carousel.getByRole('button')).toHaveCount(0)
+    release()
+    await expect(carousel.getByRole('button', { name: 'Next', exact: true })).toBeVisible()
+    await expect(carousel.locator('img:visible')).toHaveCount(1)
+    await carousel.getByRole('button', { name: 'Next', exact: true }).click()
+    await expect(carousel.getByAltText(photoNames[1]!)).toBeVisible()
+  } finally { release() }
+})
+
 for (const width of [375, 1280]) {
   test(`carousel and image requests at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 })

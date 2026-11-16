@@ -76,3 +76,37 @@ test('beta auth cache expires and fails closed, while production never requests 
   const request={uri:'/',querystring:'',headers:{host:[{value:'flatgirl.net'}]}}
   assert.equal(await production({Records:[{cf:{request}}]}),request)
 })
+
+test('known policies canonicalize and rewrite after beta authentication, including cached refreshes', async () => {
+  for (const beta of [false, true]) {
+    const { run, authorization } = runner(beta)
+    const host = beta ? 'beta.flatgirl.net' : 'flatgirl.net'
+    for (const handle of ['refund-policy', 'privacy-policy', 'shipping-policy', 'terms-of-service', 'contact-information']) {
+      const path = `/policies/${handle}`
+      if (beta) for (const suffix of ['', '/', '/index.html', '/_payload.json']) {
+        const response = await run(path + suffix)
+        assert.equal(response.status, '401')
+        assert.match(response.headers['x-robots-tag'][0].value, /noindex/)
+        assert.equal((await run(path + suffix, 'distribution.cloudfront.net')).status, '401')
+      }
+      const canonical = await run(path, host, authorization, 'x=1&x=2')
+      assert.equal(canonical.status, '301')
+      assert.equal(canonical.headers.location[0].value, `https://${host}${path}/?x=1&x=2`)
+      assert.equal(canonical.headers['cache-control'][0].value, 'no-store')
+      for (let refresh = 0; refresh < 2; refresh++) {
+        const result = await run(path + '/', host, authorization, 'x=1&x=2')
+        assert.equal(result.uri, path + '/index.html')
+        assert.equal(result.querystring, 'x=1&x=2')
+        if (beta) assert.equal(result.headers.authorization, undefined)
+      }
+      for (const name of ['index.html', '_payload.json']) assert.equal((await run(`${path}/${name}`, host, authorization)).uri, `${path}/${name}`)
+      assert.equal((await run(path + '/', 'distribution.cloudfront.net', authorization)).headers.location[0].value, `https://${host}${path}/`)
+    }
+    for (const path of ['/policies/unknown', '/policies/privacy-policy/extra.json', '/policies/privacy-policy//', '/policies/%2e%2e/index.html']) {
+      assert.equal((await run(path, host, authorization)).status, '404')
+    }
+    // Old waitlist artifacts still use the same root, asset and redirect behavior.
+    assert.equal((await run('/', host, authorization)).uri, '/')
+    assert.equal((await run('/offer', host, authorization)).status, '302')
+  }
+})

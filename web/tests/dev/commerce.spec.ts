@@ -73,7 +73,7 @@ for (const scenario of ['error', 'malformed']) {
 for (const scenario of ['sold-out', 'closed', 'waitlist']) {
   test(`${scenario} uses parent copy and correct subscription metadata`, async ({ page }) => {
     await page.goto(`/?commerce=${scenario}`)
-    await expect(page.getByRole('heading', { name: scenario === 'sold-out' ? 'Get notified about what comes next' : 'Get notified when we drop' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: scenario === 'sold-out' ? 'Get notified about future drops' : 'Get notified when we drop' })).toBeVisible()
     if (scenario === 'sold-out') {
       await expect(page.getByRole('button', { name: 'Sold out', exact: true })).toBeDisabled()
       await expect(page.getByLabel('Selected quantity')).toHaveText('0')
@@ -87,8 +87,7 @@ for (const scenario of ['sold-out', 'closed', 'waitlist']) {
     await page.getByLabel('Email address').fill('reader@example.com')
     const sent = page.waitForRequest(request => request.url().endsWith('/api/subscribe'))
     await page.getByRole('button', { name: 'Keep me posted' }).click()
-    expect((await sent).postDataJSON()).toEqual({ email: 'reader@example.com', website: '', turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
-      ...(scenario === 'sold-out' ? { purpose: 'sold_out' } : {}) })
+    expect((await sent).postDataJSON()).toEqual({ email: 'reader@example.com', website: '', turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX' })
     await expect(page.locator('.signup-success')).toBeFocused()
   })
 }
@@ -147,7 +146,7 @@ for (const scenario of ['stock-changed', 'sales-closed']) {
   test(`${scenario} refreshes into the correct signup`, async ({ page }) => {
     await page.goto(`/?commerce=${scenario}`)
     await page.getByRole('button', { name: 'Buy now', exact: true }).click()
-    await expect(page.getByRole('heading', { name: scenario === 'stock-changed' ? 'Get notified about what comes next' : 'Get notified when we drop' })).toBeFocused()
+    await expect(page.getByRole('heading', { name: scenario === 'stock-changed' ? 'Get notified about future drops' : 'Get notified when we drop' })).toBeFocused()
   })
 }
 

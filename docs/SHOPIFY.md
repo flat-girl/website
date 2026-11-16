@@ -1,8 +1,9 @@
 # Shopify integration proof
 
 For implementation order, contracts, and fresh-session prompts, use the
-[Shopify integration plan](plans/shopify-integration-plan.md). The next session
-starts with local storefront UI and mocked commerce responses.
+[Shopify integration plan](plans/shopify-integration-plan.md). Sessions 1–2 implement the local UI and static deployment preparation.
+Sold-out signup reuses the existing endpoint: beta list 10, production list 9
+(local configuration; rollout pending). Beta rehearsal is next.
 
 The local smoke test targets `tepwtx-zw.myshopify.com`, product
 `15491665297684`, and Storefront API `2026-10`. The default market is US.
@@ -111,6 +112,44 @@ uv run --locked --project tools python -m unittest discover -s tools/tests -p 't
 - [Shopify test orders](https://help.shopify.com/en/manual/checkout-settings/test-orders)
 - [Shopify Payments test details](https://help.shopify.com/en/manual/payments/shopify-payments/testing-shopify-payments)
 
-Next implementation milestone: build the local storefront UI against mocks,
-then implement the backend, sold-out Brevo signup, and beta integration in the
-separate sessions defined by the plan.
+## Sales controls for the public-token storefront
+
+Decision, November 16, 2026: **five items is a UI cap only**. The owner accepts
+that someone can bypass it. No checkout validation app, custom backend, or hard
+quantity enforcement is required for launch. Shopify offers an optional per-variant
+add-to-cart limit; it has exceptions including untracked inventory and overselling.
+Its presence/value in this store has not been inspected or changed. It is not a
+per-customer limit. [Shopify add-to-cart limits](https://help.shopify.com/en/manual/checkout-settings/add-to-cart-limit).
+
+The working setup is Headless with public Storefront reads, the pinned `2026-10`
+API, and the owner's completed test purchase. Static waitlist mode only changes
+our UI. Public tokens remain usable outside it, and issued checkout URLs can
+outlive a website rollback. No Shopify settings changed during Session 2.
+[Storefront public access](https://shopify.dev/docs/api/storefront/2026-10).
+
+Prepare and rehearse these controls in Session 4; repeat the checks in Session 7:
+
+1. **Before opening:** verify inventory tracking, online fulfillment locations,
+   US market/shipping, the quantity reserved for replacements, and that
+   **Continue selling when out of stock** is off. Record the actual sellable
+   stock. Verify payment test/live mode deliberately; the Storefront API does
+   not report it. Inventory and overselling configuration determine whether
+   stock prevents further orders.
+   [Shopify stock controls](https://help.shopify.com/en/manual/inventory-and-locations/setup/selling-when-out-of-stock).
+2. **Open sales:** confirm the product is Active and published to Headless with
+   the intended available inventory. Publish the checked commerce release.
+   Complete the beta test purchase/email/order-status rehearsal before the
+   production launch decision; do not repeat historical password workarounds.
+3. **Close sales:** record current inventory first, remove Headless publication
+   to stop new product access, and make online sellable stock unavailable with
+   tracking on and overselling off. Coordinate any other sales channels and
+   locations. Publish the waitlist release for messaging. These are intended
+   controls; test both a new direct API cart and an already-issued checkout URL
+   before relying on them as the store's closure procedure.
+4. **Reopen:** restore only the verified sellable stock/publication, accounting
+   for intervening orders, cancellations and reserved replacements. Verify
+   checkout availability before restoring the commerce release.
+
+Remaining store verification: actual inventory/overselling settings, closure of
+already-issued checkout URLs, generated beta purchase and fresh-browser order
+status access. These checks are deferred to Session 4, not implied by local tests.

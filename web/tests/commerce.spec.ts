@@ -1,91 +1,120 @@
 import { expect } from '@playwright/test'
 import { test, installImageFixture } from './image-fixture'
-import { fixtureProduct } from '../server/utils/commerce-fixtures'
+import { signupEndpoint } from './signup-fixture'
 import { readFile, readdir } from 'node:fs/promises'
 
 test.describe('generated commerce build', () => {
   test.skip(process.env.FLAT_GIRL_TEST_COMMERCE !== 'true', 'Requires the explicit static commerce fixture build')
 
-  test('production ignores scenario switches and makes a single validated checkout handoff', async ({ page }) => {
-    const requests: string[] = []
-    await page.route('https://commerce.invalid/commerce/**', async route => {
-      requests.push(route.request().url())
-      if (route.request().url().endsWith('/product')) return route.fulfill({ json: fixtureProduct('available') })
-      expect(route.request().postDataJSON()).toEqual({ quantity: 2, expectedUnitPrice: { amount: '60.00', currencyCode: 'USD' } })
-      return route.fulfill({ status: 201, json: { checkoutUrl: 'https://flatgirl.myshopify.com/checkout/fixture' } })
+  const endpoint = 'https://tepwtx-zw.myshopify.com/api/2026-10/graphql.json'
+  const variant = 'gid://shopify/ProductVariant/68124854681876'
+  const product = (available = true) => ({ node: { id: variant,
+    product: { id: 'gid://shopify/Product/15491665297684', title: 'Blanket' },
+    availableForSale: available, quantityAvailable: available ? 499 : 0,
+    price: { amount: '60.00', currencyCode: 'USD' },
+  } })
+  const cart = (quantity: number, checkoutUrl: string) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
+    checkoutUrl, totalQuantity: quantity,
+    lines: { nodes: [{ quantity, merchandise: { id: variant } }] },
+    cost: { subtotalAmount: { amount: String(quantity * 60), currencyCode: 'USD' } },
+  } } })
+
+  test.beforeEach(async ({ context }) => {
+    // Abort all Shopify traffic unless an individual test explicitly intercepts it.
+    await context.route('https://**.myshopify.com/**', route => route.abort())
+    await context.route('**/api/commerce/**', route => { throw new Error('Unexpected private/mock fallback: ' + route.request().url()) })
+  })
+
+  test('public token ignores scenarios and makes one validated checkout handoff', async ({ page }) => {
+    const operations: string[] = []
+    await page.route(endpoint, async route => {
+      expect(route.request().headers()['x-shopify-storefront-access-token']).toBe('test-public-token')
+      expect(route.request().headers()['shopify-storefront-private-token']).toBeUndefined()
+      const body = route.request().postDataJSON()
+      if (body.query.includes('cartCreate')) {
+        operations.push('cart')
+        expect(body.variables.input).toEqual({ lines: [{ merchandiseId: variant, quantity: 2 }], buyerIdentity: { countryCode: 'US' } })
+        return route.fulfill({ json: { data: cart(2, 'https://flatgirl.myshopify.com/checkout/fixture') } })
+      }
+      operations.push('product')
+      return route.fulfill({ json: { data: product() } })
     })
-    await page.route('https://flatgirl.myshopify.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Intercepted checkout</h1>' }))
+    await page.route('https://flatgirl.myshopify.com/checkout/fixture', route => route.fulfill({ contentType: 'text/html', body: '<h1>Intercepted checkout</h1>' }))
     await page.goto('/?commerce=sold-out')
     await page.getByRole('button', { name: 'Increase quantity' }).click()
     await expect(page.getByLabel('Email address')).toHaveCount(0)
     await page.getByRole('button', { name: 'Buy now', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Intercepted checkout' })).toBeVisible()
-    expect(requests).toEqual(['https://commerce.invalid/commerce/product', 'https://commerce.invalid/commerce/checkout'])
+    expect(operations).toEqual(['product', 'product', 'cart'])
   })
 
-  test('production rejects localhost checkout and does not enable sold-out subscriptions', async ({ page }) => {
-    await page.route('https://commerce.invalid/commerce/product', route => route.fulfill({ json: fixtureProduct('available') }))
-    await page.route('https://commerce.invalid/commerce/checkout', route => route.fulfill({ status: 201, json: { checkoutUrl: 'http://localhost:3000/api/commerce/mock-checkout?quantity=1' } }))
+  test('public token rejects localhost checkout and sold-out signup reuses the existing request', async ({ page }) => {
+    let available = true
+    await page.route(endpoint, route => route.fulfill({ json: { data: route.request().postDataJSON().query.includes('cartCreate')
+      ? cart(1, 'http://localhost:3000/api/commerce/mock-checkout?quantity=1') : product(available) } }))
     await page.goto('/')
     await page.getByRole('button', { name: 'Buy now', exact: true }).click()
     await expect(page.locator('.purchase-message')).toContainText('Checkout could not open')
-    await page.route('https://commerce.invalid/commerce/product', route => route.fulfill({ json: fixtureProduct('sold-out') }))
+    available = false
     await page.reload()
     await expect(page.locator('.stock')).toHaveText('Drop 1 - 0 of 500 Remaining')
     await expect(page.locator('.stock')).toHaveCSS('text-decoration-line', 'line-through')
-    await expect(page.getByText("Email updates aren't available just yet. Please check back.")).toBeVisible()
-    await expect(page.getByLabel('Email address')).toHaveCount(0)
+    await page.route(signupEndpoint, async route => {
+      const body = route.request().postDataJSON()
+      expect(Object.keys(body).sort()).toEqual(['email', 'turnstileToken', 'website'])
+      expect(body.email).toBe('soldout@example.com')
+      await route.fulfill({ json: { accepted: true } })
+    })
+    await page.getByLabel('Email address').fill('soldout@example.com')
+    await page.getByRole('button', { name: 'Keep me posted' }).click()
+    await expect(page.locator('.signup-success')).toBeVisible()
   })
 
-  test('page switches purchase and signup independently as availability changes', async ({ page }) => {
-    let scenario = 'available'
-    let reads = 0
-    await page.route('https://commerce.invalid/commerce/product', route => {
-      reads++
-      return route.fulfill({ json: fixtureProduct(scenario) })
-    })
+  test('availability updates after returning from checkout', async ({ page }) => {
+    let available = true
+    await page.route(endpoint, route => route.fulfill({ json: { data: product(available) } }))
     await page.goto('/')
     await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toBeEnabled()
-    expect(reads).toBe(1)
     await expect(page.locator('.signup')).toHaveCount(0)
-    await expect(page.locator('.stock')).toHaveCSS('text-decoration-line', 'none')
-    await expect(page.locator('.purchase #fulfillment-note')).toBeVisible()
-
-    scenario = 'sold-out'
+    available = false
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    await expect(page.getByRole('heading', { name: 'Get notified about what comes next' })).toBeFocused()
-    await expect(page.locator('.purchase')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Get notified about future drops' })).toBeFocused()
     await expect(page.getByRole('button', { name: 'Sold out', exact: true })).toBeDisabled()
     await expect(page.getByLabel('Selected quantity')).toHaveText('0')
-    await expect(page.getByRole('button', { name: 'Decrease quantity' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Increase quantity' })).toBeDisabled()
-    await expect(page.getByText('$60', { exact: true })).toBeVisible()
     await expect(page.locator('#fulfillment-note')).toHaveCount(0)
-    await expect(page.locator('[aria-describedby="fulfillment-note"]')).toHaveCount(0)
-    await expect(page.locator('.stock')).toHaveText('Drop 1 - 0 of 500 Remaining')
-    await expect(page.locator('.stock')).toHaveCSS('text-decoration-line', 'line-through')
-
-    scenario = 'closed'
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    await expect(page.getByRole('heading', { name: 'Get notified when we drop' })).toBeVisible()
-    await expect(page.locator('.purchase')).toHaveCount(0)
-    await expect(page.locator('.stock')).toHaveCount(0)
-
-    scenario = 'available'
+    available = true
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toBeEnabled()
     await expect(page.locator('.signup')).toHaveCount(0)
   })
 
-  test('generated policy routes load directly and have a working retry', async ({ page }) => {
-    await page.route('https://commerce.invalid/commerce/policies/shipping-policy', route => route.fulfill({ json: {
-      schemaVersion: 1, policy: { handle: 'shipping-policy', title: 'Shipping Policy', paragraphs: ['Shipping terms from the policy API.'] },
-    } }))
-    await page.goto('/policies/shipping-policy/')
-    await expect(page.getByRole('heading', { name: 'Shipping Policy' })).toBeVisible()
-    await expect(page.getByText('Shipping terms from the policy API.')).toBeVisible()
+  test('all generated policies support direct links, refresh and retry', async ({ page }) => {
+    let failing = false
+    await page.route(endpoint, route => {
+      expect(route.request().postDataJSON().query).toContain('policy:')
+      return failing ? route.fulfill({ status: 503 }) : route.fulfill({ json: { data: {
+        shop: { policy: { title: 'Policy', body: '<p>Current Shopify policy.</p>' } },
+      } } })
+    })
+    for (const handle of ['shipping-policy', 'privacy-policy', 'refund-policy', 'terms-of-service', 'contact-information']) {
+      await page.goto(`/policies/${handle}/`)
+      await expect(page.getByText('Current Shopify policy.')).toBeVisible()
+      await page.reload()
+      await expect(page.getByText('Current Shopify policy.')).toBeVisible()
+    }
+    failing = true
     await page.reload()
-    await expect(page.getByText('Shipping terms from the policy API.')).toBeVisible()
+    await expect(page.getByText('This policy is currently unavailable. Please try again.')).toBeVisible()
+    failing = false
+    await page.getByRole('button', { name: 'Try again?' }).click()
+    await expect(page.getByText('Current Shopify policy.')).toBeVisible()
+  })
+
+  test('public authorization failure never falls back to the private endpoint', async ({ page }) => {
+    await page.route(endpoint, route => route.fulfill({ status: 401 }))
+    await page.goto('/')
+    await expect(page.getByText('Availability could not load. Please try again.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toHaveCount(0)
   })
 
   test('without JavaScript the story, photos and checkout explanation remain', async ({ browser, baseURL }) => {
@@ -94,8 +123,7 @@ test.describe('generated commerce build', () => {
     const page = await context.newPage()
     await page.goto('/')
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Boring Flat Girl Plush Blanket')
-    await expect(page.locator('noscript')).toBeVisible()
-    await expect(page.locator('noscript')).toHaveJSProperty('textContent', 'Enable JavaScript to check availability and buy a blanket.')
+    await expect(page.locator('noscript').filter({ hasText: 'Enable JavaScript to check availability and buy a blanket.' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toHaveCount(0)
     await context.close()
   })

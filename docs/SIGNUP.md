@@ -4,6 +4,13 @@
 The user verified both forms and welcome emails, plus preserved unsubscribe status
 on a beta re-submission. See the [completion evidence and verification limits](plans/milestone-3-plan.md#completion-handoff--november-5-2026).
 
+**November 16 local update:** production targets **SoldOutList (9)** and beta targets **betaSoldOutList (10)**.
+This change has not been deployed. Launch and sold-out forms share the same
+endpoint and configured list; no separate purpose field or audience routing is used.
+Each environment's signup stack must be deployed before building against its new list.
+Use the [beta commerce migration workflow](workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md)
+for the ordered beta list-10 deployment and verification.
+
 The numbered rollout steps below are retained for setup/recovery, not outstanding
 closeout tasks. The initial deployment and tagging-failure recovery are complete.
 
@@ -11,7 +18,7 @@ closeout tasks. The initial deployment and tagging-failure recovery are complete
 | --- | --- | --- |
 | Site | `https://beta.flatgirl.net` | `https://flatgirl.net` |
 | API | `https://beta-api.flatgirl.net/subscribe` | `https://api.flatgirl.net/subscribe` |
-| Brevo list | **5** | **4** |
+| Brevo list (configured) | **10** | **9** |
 | Signup stack | `FlatGirlBetaSignup` / `STACK=signup-beta` | `FlatGirlProductionSignup` / `STACK=signup-production` |
 | Function | `flat-girl-beta-signup` | `flat-girl-production-signup` |
 
@@ -32,7 +39,7 @@ Owner notifications use a separate SQS/SES background worker; see
 ## 1. Confirm providers and update AWS access
 
 Confirm the shared Turnstile widget permits `flatgirl.net` and `beta.flatgirl.net`.
-Confirm list IDs 5/4 belong to the intended Brevo account and that welcome
+Confirm list IDs 10/9 belong to the intended Brevo account and that welcome
 automation uses the intended list triggers. Testing with a controlled email may
 send that welcome email. Test duplicates should not retrigger it through a new
 membership write; Brevo's automation settings still govern its behavior.
@@ -109,7 +116,7 @@ read provider secrets. `site-verify` checks published bytes/hosting/images; sign
 behavior requires the separate browser verification:
 
 1. Open beta, authenticate, and submit a controlled address through the real widget.
-   Confirm membership in **list 5**, without adding membership in list 4. Check
+   Confirm membership in **list 10**, without adding membership in list 9. Check
    the welcome email separately in Brevo and the controlled inbox.
 2. Submit the same address again. Confirm the same public acknowledgment, no
    extra contact, and no application-driven membership update or welcome resend.
@@ -146,7 +153,7 @@ make site-verify PROFILE=flat-girl-production SITE_ENV=production
 make signup-status PROFILE=flat-girl SITE_ENV=production
 ```
 
-Submit one controlled production address and verify **list 4** and the intended
+Submit one controlled production address and verify **list 9** and the intended
 welcome behavior. Verify duplicates and disable/re-enable before promotion.
 Signup completion does not enable sales or send the launch campaign. Production
 noindex remains under the existing milestone 2 configuration.

@@ -287,7 +287,7 @@ test('source query uses an indexed inclusive time range and preserves pagination
 test('both source tables have a projected time index without changing their primary key', () => {
   const p = config({ account: '111111111111', region: 'us-east-1', hostedZoneId: 'ZEXAMPLE', domain: 'flatgirl.net', operatorPrincipalArn: null, betaEnabled: true, productionNoindex: true })
   for (const env of ['beta', 'production'] as const) {
-    const template = Template.fromStack(new Signup(new App(), p, env, { turnstileSiteKey: '', beta: { enabled: false, listId: 5, rateLimit: 5, burstLimit: 10 }, production: { enabled: false, listId: 4, rateLimit: 5, burstLimit: 10 } }))
+    const template = Template.fromStack(new Signup(new App(), p, env, { turnstileSiteKey: '', beta: { enabled: false, listId: 10, rateLimit: 5, burstLimit: 10 }, production: { enabled: false, listId: 9, rateLimit: 5, burstLimit: 10 } }))
     template.hasResourceProperties('AWS::DynamoDB::Table', {
       KeySchema: [{ AttributeName: 'event_id', KeyType: 'HASH' }],
       GlobalSecondaryIndexes: [{ IndexName: 'environment-time',

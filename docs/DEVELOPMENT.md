@@ -5,7 +5,7 @@ a zoomable full-size photo viewer, and a working launch-notification form. Miles
 are complete for their core scope; beta and production are deployed.
 Production: <https://flatgirl.net>.
 Final landing-page content and branding come later.
-Signup is enabled with beta list **5**, production list **4**, shared provider
+Signup is enabled with beta list **10**, production list **9** (local configuration; rollout pending), shared provider
 keys, and a Brevo-managed welcome email. See the [signup runbook](SIGNUP.md)
 and [milestone 3 completion handoff](plans/milestone-3-plan.md#completion-handoff--november-5-2026).
 Meta CAPI is deployed with SQS delivery, durable DynamoDB event records, and a
@@ -258,21 +258,23 @@ to local and restart before running them. `npm run test:commerce:service --prefi
 tests the Shopify adapter with injected responses, without a server or token.
 
 Generated builds default to waitlist mode and ignore scenario query parameters.
-An explicit commerce build needs `FLAT_GIRL_STOREFRONT_MODE=commerce` and a remote
-HTTPS `FLAT_GIRL_COMMERCE_ENDPOINT`. Until Session 3, published sold-out states
-show signup copy but disable email collection. Policies fetch after mounting;
+An explicit commerce build needs `FLAT_GIRL_STOREFRONT_MODE=commerce` and
+`NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN`. Leave `FLAT_GIRL_COMMERCE_ENDPOINT`
+unset: static hosting calls Shopify directly. Published sold-out states use the same signup request and endpoint as the
+launch form (beta list 10, production list 9 after the signup-stack rollout). Policies fetch after mounting;
 without JavaScript, their page shell explains the requirement. Generation
-prerenders all five policy routes, but AWS publisher/router support is still a
-Session 2 dependency. No backend routes are deployed by Nuxt generation.
+prerenders all five policy routes. The publisher accepts only their HTML/payload
+paths; the edge router serves their index documents after beta authentication.
+The routing change must be deployed with the beta stack before publication. No backend routes are deployed by Nuxt generation.
 
 For static browser validation while dev uses port 3000, run the following
 **test-only builds**, whose network responses are intercepted by Playwright:
 
 ```sh
-FLAT_GIRL_SIGNUP_ENDPOINT=https://signup.invalid/subscribe FLAT_GIRL_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run generate --prefix web
+FLAT_GIRL_SIGNUP_ENDPOINT=https://signup.invalid/subscribe FLAT_GIRL_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run generate --prefix web -- --dotenv /dev/null
 FLAT_GIRL_TEST_PORT=3001 FLAT_GIRL_TEST_SIGNUP=true npm run test:e2e --prefix web
 
-FLAT_GIRL_STOREFRONT_MODE=commerce FLAT_GIRL_COMMERCE_ENDPOINT=https://commerce.invalid/commerce npm run generate --prefix web
+FLAT_GIRL_STOREFRONT_MODE=commerce NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN=test-public-token FLAT_GIRL_SIGNUP_ENDPOINT=https://signup.invalid/subscribe FLAT_GIRL_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run generate --prefix web -- --dotenv /dev/null
 FLAT_GIRL_TEST_PORT=3001 FLAT_GIRL_TEST_COMMERCE=true npm run test:e2e --prefix web -- commerce.spec.ts
 ```
 
@@ -314,10 +316,10 @@ browser configuration: never put a private or Admin token in this variable.
 The shared HTML sanitizer preserves policy rich text in both modes.
 In browser Network tools, verify requests to the store's `/api/2026-10/graphql.json`
 with `X-Shopify-Storefront-Access-Token`, rather than `/api/commerce`.
-Actual access to the password-protected store still needs verification with your
-public token. This does not change the existing production commerce build guard,
-AWS routing requirements, or Shopify checkout/payment settings. Browser quantity
-checks are UI safeguards; enforce purchase restrictions in Shopify for launch.
+The owner reports public-token access working locally. Generated beta checkout
+remains a Session 4 check; this switch does not change Shopify payment settings.
+The five-item cap is a UI convenience, not a hard purchase restriction (owner
+decision November 16). Inventory and sales closure still need Shopify enforcement.
 
 Shopify source:
 
@@ -344,6 +346,9 @@ in our frontend. If testing hosted checkout requires storefront login, use the
 Shopify password form in that browser; the redirect theme must preserve a usable
 password page (see `docs/SHOPIFY.md`).
 
-This adapter is served by the **local Nuxt dev server only**. Static AWS hosting
-still needs the Session 2 backend and policy-route changes. A normal generated
-build stays in waitlist mode and does not connect to Shopify during generation.
+With a public token, the shared adapter runs directly in the browser, including
+static AWS builds. Without it, private-token requests use the local Nuxt server
+only. A normal generated build stays in waitlist mode and does not connect to
+Shopify during generation. `make site-build` ignores `web/.env`, checks public
+settings, removes private-token/unchecked public overrides, and records commerce
+settings in the release manifest. See [beta migration workflow](workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md).

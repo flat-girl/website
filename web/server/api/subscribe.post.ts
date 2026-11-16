@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'cache-control', 'no-store')
   const body = await readBody(event)
   if (!body || typeof body.email !== 'string' || body.email.trim().length > 254 ||
-      (body.purpose !== undefined && !['launch', 'sold_out'].includes(body.purpose)) ||
+      Object.keys(body).sort().join(',') !== 'email,turnstileToken,website' ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim()) || body.website !== '' ||
       body.turnstileToken !== 'XXXX.DUMMY.TOKEN.XXXX') {
     throw createError({ statusCode: 400, statusMessage: 'Unable to process signup.' })

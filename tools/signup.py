@@ -15,7 +15,7 @@ from prepare_images import ROOT, write_json
 
 CONFIG_PATH = ROOT/'cloud/signup.json'
 PARAMETERS = {'turnstile': '/flat-girl/signup/turnstile-secret', 'brevo': '/flat-girl/signup/brevo-api-key'}
-LISTS = {'beta': 5, 'production': 4}
+LISTS = {'beta': 10, 'production': 9}
 
 def validate_config(value):
     if not isinstance(value, dict) or set(value) != {'turnstileSiteKey', 'beta', 'production'}:
@@ -31,7 +31,7 @@ def validate_config(value):
             type(item['rateLimit']) not in (int, float) or not 0 < item['rateLimit'] <= 100 or
             type(item['burstLimit']) is not int or not 1 <= item['burstLimit'] <= 100 or
             item['enabled'] and not key):
-            raise ValueError('Signup requires beta list 5, production list 4, bounded throttles and a real site key before enabling')
+            raise ValueError('Signup requires beta list 10, production list 9, bounded throttles and a real site key before enabling')
     return value
 
 def config(path=CONFIG_PATH):

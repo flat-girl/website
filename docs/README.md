@@ -34,6 +34,18 @@ for current behavior.
 
 ## Where new documentation belongs
 
+**Before writing deployment instructions, decide whether they are routine operations
+or a one-off change.** A first rollout, required deployment order across stacks,
+list/configuration cutover, or recovery for a specific revision belongs in a dated
+**migration workflow**, even when the commands themselves are ordinary `make`
+commands and execution is deferred to another session.
+
+Create or update that workflow before completing the implementation handoff. Mark
+unexecuted work **pending**, index it in `docs/workflows/README.md`, and link it from
+the affected guides and plan. Keep the execution steps in one place: do not append
+a session-specific rollout checklist to `DEPLOYMENT.md`, another operational guide,
+or a plan. Those documents retain reusable behavior and a link to the workflow.
+
 - Keep reusable setup, commands, architecture, and troubleshooting in the relevant guide.
 - Keep implementation plans, the roadmap, and their historical evidence in `docs/plans/`.
 - Put one-time migration, rollout, cutover, and incident-recovery procedures in
