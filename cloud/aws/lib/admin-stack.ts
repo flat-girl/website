@@ -34,7 +34,7 @@ export class Admin extends Base {
     const certificate = new acm.Certificate(this, 'Certificate', { domainName: host, validation: acm.CertificateValidation.fromDns(zone) })
     const cache = new db.Table(this, 'Cache', { tableName: adminCache, partitionKey: { name: 'pk', type: db.AttributeType.STRING },
       sortKey: { name: 'sk', type: db.AttributeType.STRING }, billingMode: db.BillingMode.PAY_PER_REQUEST,
-      encryption: db.TableEncryption.AWS_MANAGED, timeToLiveAttribute: 'ttl', removalPolicy: RemovalPolicy.RETAIN })
+      encryption: db.TableEncryption.DEFAULT, timeToLiveAttribute: 'ttl', removalPolicy: RemovalPolicy.RETAIN })
     const group = new logs.LogGroup(this, 'Logs', { logGroupName: `/aws/lambda/${adminFunction}`, retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE })
     const fn = new lambda.Function(this, 'Metrics', { functionName: adminFunction, runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64, handler: 'index.handler', code: lambda.Code.fromInline(adminCode()),

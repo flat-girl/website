@@ -153,7 +153,8 @@ test('admin infrastructure is independent; runtime writes only cache and logs', 
   const app = new App(), access = new Access(app, p), admin = new Admin(app, p)
   const a = Template.fromStack(admin)
   a.resourceCountIs('AWS::DynamoDB::Table', 1)
-  a.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'flat-girl-admin-cache', TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true } })
+  a.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'flat-girl-admin-cache',
+    SSESpecification: { SSEEnabled: false }, TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true } })
   a.hasResourceProperties('AWS::CertificateManager::Certificate', { DomainName: 'admin.flatgirl.net' })
   const distribution: any = Object.values(a.findResources('AWS::CloudFront::Distribution'))[0]
   assert.equal(distribution.Properties.DistributionConfig.CacheBehaviors[0].CachePolicyId, '4135ea2d-6df8-44a3-9df3-4b5a84be39ad')

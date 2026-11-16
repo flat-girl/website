@@ -202,7 +202,7 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
       TableName: `flat-girl-${env}-events`, BillingMode: 'PAY_PER_REQUEST', DeletionProtectionEnabled: true,
       KeySchema: [{ AttributeName: 'event_id', KeyType: 'HASH' }],
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
-      SSESpecification: { SSEEnabled: true },
+      SSESpecification: { SSEEnabled: false },
     })
     const table: any = Object.values(template.findResources('AWS::DynamoDB::Table'))[0]
     assert.equal(table.Properties.TimeToLiveSpecification, undefined)

@@ -151,6 +151,45 @@ test('expired enabled configuration fails closed instead of using stale settings
   await runtime.config(signal()); await runtime.config(signal()); assert.equal(reads, 1)
   clock += 61000; await assert.rejects(runtime.config(signal())); assert.equal(reads, 2)
 })
+test('worker credentials persist for its lifetime and stay isolated by runtime', async () => {
+  let clock = now, token = 'initial-token'
+  const reads: string[] = [], sent: string[] = [], logs: any[] = []
+  const deps = { now: () => clock,
+    read: async (name: string) => { reads.push(name); return { datasetId: '123', accessToken: token } },
+    fetch: async (_url: string, options: any) => {
+      sent.push(options.headers.authorization); return { ok: true, json: async () => ({ events_received: 1 }) }
+    }, log: (value: any) => logs.push(value) }
+  const runtime = meta.createRuntime('beta', deps)
+  const event = meta.buildEvent('ViewContent', 'beta', { agent: 'Browser' }, now)
+  await runtime.deliver(event, cfg('beta', { mode: 'off' }), signal())
+  await runtime.deliver(event, cfg('beta', { viewEnabled: false }), signal())
+  assert.equal(reads.length, 0)
+  await runtime.deliver(event, cfg('beta'), signal())
+  token = 'new-worker-token'; clock += 86400000
+  await runtime.deliver(event, cfg('beta'), signal())
+  assert.equal(reads.length, 1)
+  await meta.createRuntime('production', deps).deliver(meta.buildEvent('ViewContent', 'production', { agent: 'Browser' }, now), cfg(), signal())
+  await meta.createRuntime('beta', deps).deliver(event, cfg('beta'), signal())
+  assert.deepEqual(sent, ['Bearer initial-token', 'Bearer initial-token', 'Bearer new-worker-token', 'Bearer new-worker-token'])
+  assert.deepEqual(reads, ['/flat-girl/meta/beta/credentials', '/flat-girl/meta/production/credentials', '/flat-girl/meta/beta/credentials'])
+  assert.ok(!JSON.stringify(logs).includes('token'))
+})
+test('failed or invalid initial worker credentials are retried instead of cached', async () => {
+  let reads = 0, sends = 0
+  const runtime = meta.createRuntime('beta', {
+    read: async () => {
+      reads++
+      if (reads === 1) throw Error('unavailable')
+      return { datasetId: '123', accessToken: reads === 2 ? '' : 'valid-token' }
+    }, fetch: async () => { sends++; return { ok: true, json: async () => ({ events_received: 1 }) } }, log: () => {} })
+  const event = meta.buildEvent('ViewContent', 'beta', { agent: 'Browser' }, now)
+  await assert.rejects(runtime.deliver(event, cfg('beta'), signal()), /unavailable/)
+  await assert.rejects(runtime.deliver(event, cfg('beta'), signal()), /credentials/)
+  assert.equal(sends, 0)
+  await runtime.deliver(event, cfg('beta'), signal())
+  await runtime.deliver(event, cfg('beta'), signal())
+  assert.equal(reads, 3); assert.equal(sends, 2)
+})
 test('Graph retries preserve payload and token stays out of URL; deployed delivery never adds a test code', async () => {
   const calls: any[] = [], event = meta.buildEvent('Lead', 'production', { email: 'reader@example.com', agent: 'Browser' }, now)
   await meta.deliver(event, cfg(), { datasetId: '123', accessToken: 'secret' }, signal(), async (url: string, options: any) => {

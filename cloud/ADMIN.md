@@ -59,6 +59,10 @@ uniques, retained in total views, and disclosed. This is not a matched conversio
 funnel. The rate uses the selected view-counting basis.
 
 The only writable table is `flat-girl-admin-cache` (plus execution-log writes).
+It uses DynamoDB's AWS-owned encryption key, with no account-level KMS request charges.
+The KMS reduction rollout was verified November 14, 2026: the existing cache table
+remained ACTIVE with its original creation date, and the user reported the manual
+production regression passed.
 Schema 3 stores immutable completed-hour counts and keyed fingerprints, a replaceable
 current-hour snapshot, durable query progress, DLQ attributes, and one global
 mutex. History is partitioned by environment/archive, UTC hour, and fingerprint
