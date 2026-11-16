@@ -66,6 +66,13 @@ class ShopifyTests(unittest.TestCase):
         self.assertEqual(result['checkoutUrl'], data['cartCreate']['cart']['checkoutUrl'])
         self.assertEqual(shopify.SHOP, 'tepwtx-zw.myshopify.com')
 
+    def test_accepts_branded_checkout_without_rewriting_path_or_query(self):
+        data = cart()
+        url = 'https://shopify.flatgirl.net/checkouts/example?key=fixture-key'
+        data['cartCreate']['cart']['checkoutUrl'] = url
+        result = shopify.create_checkout(lambda *args: data, product()['variants']['nodes'][0], 'US')
+        self.assertEqual(result['checkoutUrl'], url)
+
     def test_rejects_partial_cart_warnings_errors_and_untrusted_redirects(self):
         mutations = [
             lambda x: x['cartCreate'].update(userErrors=[{'code': 'INVALID'}]),
@@ -76,6 +83,11 @@ class ShopifyTests(unittest.TestCase):
             lambda x: x['cartCreate']['cart']['lines']['nodes'][0]['merchandise'].update(id='wrong'),
         ]
         for url in ['http://' + shopify.SHOP, 'https://evil.invalid/checkout',
+                    'http://shopify.flatgirl.net/checkouts/example',
+                    'https://shopify.flatgirl.net.evil.invalid/checkouts/example',
+                    'https://user@shopify.flatgirl.net/checkouts/example',
+                    'https://shopify.flatgirl.net:8443/checkouts/example',
+                    'https://untrusted.example/checkouts/example',
                     'https://flatgirl.myshopify.com.evil.invalid/checkout',
                     'https://' + shopify.SHOP + '.evil.invalid/', 'https://user@' + shopify.SHOP + '/',
                     'https://' + shopify.SHOP + ':8443/']:

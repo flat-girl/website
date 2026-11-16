@@ -114,7 +114,7 @@ def build(aws,env):
     subprocess.run(['npm','run','generate','--prefix','web','--','--dotenv','/dev/null'],cwd=ROOT,env=settings,check=True)
     public=output/'public'
     commerce_build.validate_output(public,commerce,env,signup,private_values=[v for k,v in os.environ.items() if 'TOKEN' in k and 'PUBLIC' not in k])
-    (public/'robots.txt').write_text('User-agent: *\nDisallow: /\n' if noindex else 'User-agent: *\nAllow: /\n')
+    (public/'robots.txt').write_text('User-agent: *\nDisallow: /\n' if noindex else 'User-agent: *\nAllow: /\nSitemap: https://flatgirl.net/sitemap.xml\n')
     files=file_manifest(public)
     release=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+digest(files)[:12]
     write_json(public/'build.json',dict(release=release,environment=env,revision=revision,dirty=dirty))

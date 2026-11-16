@@ -5,7 +5,7 @@ import { policyTags, safePolicyHref, type PolicyNode } from './policy'
 const host = 'tepwtx-zw.myshopify.com'
 const productId = 'gid://shopify/Product/15491665297684'
 const variantId = 'gid://shopify/ProductVariant/68124854681876'
-const checkoutHosts = [host, 'flatgirl.myshopify.com']
+const checkoutHosts = [host, 'flatgirl.myshopify.com', 'shopify.flatgirl.net']
 const policyFields: Record<string, string> = {
   'refund-policy': 'refundPolicy', 'privacy-policy': 'privacyPolicy',
   'shipping-policy': 'shippingPolicy', 'terms-of-service': 'termsOfService',

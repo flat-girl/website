@@ -112,6 +112,16 @@ class CommerceBuildTests(unittest.TestCase):
             (public / 'index.html').write_text('<script>window.__NUXT__.config={public:{signupEndpoint:"",turnstileSiteKey:""},app:{}}</script>')
             commerce.validate_output(public, None, 'production')
 
+    def test_archived_host_list_remains_publishable_but_new_builds_require_branded_host(self):
+        for hosts in (commerce.LEGACY_CHECKOUT_HOSTS, commerce.CHECKOUT_HOSTS):
+            with self.subTest(hosts=hosts), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                settings = dict(self.settings(), checkoutHosts=hosts)
+                _, manifest = self.artifact(root, settings)
+                self.assertEqual(validate_artifact(root, 'beta', dict(account='123456789012', domain='flatgirl.net')), manifest)
+        with self.assertRaisesRegex(ValueError, 'New builds must include'):
+            self.settings(NUXT_PUBLIC_CHECKOUT_HOSTS=commerce.LEGACY_CHECKOUT_HOSTS)
+
 
 if __name__ == '__main__':
     unittest.main()

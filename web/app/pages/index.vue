@@ -1,5 +1,31 @@
 <script setup lang="ts">
 import { storefront, launchSignup, soldOutSignup } from '~/content/storefront'
+
+// This Nuxt page owns search/social metadata; Shopify's listing describes its own storefront.
+const canonicalUrl = 'https://flatgirl.net/'
+const description = 'Plush blanket featuring the Boring Flat Girl design. Includes one blanket.'
+const sharePhoto = useImages().find(image => image.id === 'flatgirl-shoota-chair03')
+const shareImage = sharePhoto ? new URL(sharePhoto.full, canonicalUrl).href : undefined
+useSeoMeta({
+  title: storefront.title,
+  description,
+  ogTitle: storefront.title,
+  ogDescription: description,
+  ogType: 'website',
+  ogUrl: canonicalUrl,
+  ogSiteName: 'Flat Girl',
+  ogImage: shareImage,
+  ogImageAlt: sharePhoto ? 'The Boring Flat Girl plush blanket draped over a chair' : undefined,
+  ogImageWidth: sharePhoto?.width,
+  ogImageHeight: sharePhoto?.height,
+  twitterCard: 'summary_large_image',
+  twitterTitle: storefront.title,
+  twitterDescription: description,
+  twitterImage: shareImage,
+  twitterImageAlt: sharePhoto ? 'The Boring Flat Girl plush blanket draped over a chair' : undefined,
+})
+useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
+
 const config = useRuntimeConfig().public
 const route = useRoute()
 const commerce = computed(() => import.meta.dev && config.commerceSource === 'local'

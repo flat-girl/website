@@ -20,7 +20,7 @@ if (env.FLAT_GIRL_COMMERCE_ENDPOINT) {
     throw new Error('Published commerce endpoints must use a remote HTTPS URL')
   }
 }
-const checkoutHosts = 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com'
+const checkoutHosts = 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com,shopify.flatgirl.net'
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-11-05',

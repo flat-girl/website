@@ -1,13 +1,14 @@
 # Shopify integration — session plan
 
-**Updated:** November 16, 2026. **Next:** Session 4, beta deployment and rehearsal.
+**Updated:** November 16, 2026. **Next:** Session 5, branded domains and return navigation; close remaining beta verification evidence.
 
 This is the current ecommerce plan. The user requested frontend work first so
 the design and purchase states can be iterated locally, followed by separate
-Codex sessions for the remaining integration work. Session 1 is implemented locally,
-including mocks and direct Shopify access. The owner reports public-token access
-working in local preview; the generated beta purchase flow is not yet verified.
-No deployment has been performed as part of this implementation.
+Codex sessions for the remaining integration work. Sessions 1–3 are implemented.
+The owner now reports beta up and running and Shopify looking ready. Treat beta
+publication as owner-reported complete; the detailed purchase/signup/rollback
+matrix below is not automatically verified by that report. This audit made no
+deployment or Shopify configuration changes.
 
 ## Start a fresh session
 
@@ -21,12 +22,14 @@ next action. If a session needs splitting, record the boundary and remaining wor
 
 Copy this for the next session:
 
-> Execute Session 4 in docs/plans/shopify-integration-plan.md using the implementation
-> handoffs and docs/workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md.
-> Sold-out signup reuses the existing endpoint: beta list 10, production
-> list 9. Deploy the policy router and public-token commerce artifact to beta,
-> then rehearse checkout, policy links and signup. Preserve production until
-> its deliberate rollout. Review the documented Shopify checks before testing.
+> Execute Session 5 in docs/plans/shopify-integration-plan.md, starting with the
+> November 16 readiness audit. Beta is running per the owner; do not repeat its
+> deployment just because historical handoffs say pending. Follow
+> docs/workflows/20261116_SHOPIFY_BRANDED_DOMAINS.md for the cutover. The owner has
+> set up shopify.flatgirl.net for checkout. Use Shopify's default account URLs;
+> keep flatgirl.net on AWS.
+> Close remaining Session 4 evidence and verify or explicitly defer Session 6.
+> Production launch remains a separate deliberate rollout.
 
 For subsequent sessions, replace the session number and use its scope below.
 Plans describe intended work; they are not evidence that it is deployed.
@@ -36,21 +39,21 @@ Plans describe intended work; they are not evidence that it is deployed.
 | Item | Recorded state |
 | --- | --- |
 | Public site | `flatgirl.net`, existing waitlist, statically generated Nuxt/Vue and plain CSS on S3/CloudFront |
-| Beta | `beta.flatgirl.net`, Basic Auth and noindex; independent static publication |
+| Beta | Owner reports up and running; public unauthenticated GET returned 401 on November 16; authenticated flow not inspected in this audit |
 | Shopify API host | `tepwtx-zw.myshopify.com`; retain this working API identifier |
-| Current customer-facing Shopify host | `flatgirl.myshopify.com`; accepted by the smoke test |
+| Current customer-facing Shopify host | Owner reports `shopify.flatgirl.net` set up; local allowlists updated; publication pending |
 | Product / variant | `gid://shopify/Product/15491665297684` / `gid://shopify/ProductVariant/68124854681876` |
 | Product facts observed in proof | USD 60.00, available for sale; Shopify is the price/availability authority |
 | API version | Smoke test pins Storefront API `2026-10`; recheck support when implementing |
 | API proof | Owner confirmed test purchase through confirmation email on November 16 |
-| Public-token frontend | Owner reports working locally; mocked browser checks cover direct policy requests and no private fallback; generated beta checkout remains unverified |
+| Public-token frontend | Owner reports beta running and Shopify ready; mocked browser checks cover direct requests/no private fallback; detailed beta purchase evidence remains unrecorded |
 | Policies | Owner reports all policies entered in Shopify; final launch review remains |
 | Order-status verification | Access from the email link in a fresh/private browser is not yet explicitly confirmed |
 | Payments | Owner enabled test mode; recheck actual setting before each live test and launch |
 | Local commands | `make shopify-check` reads product; `make shopify-test` creates one-unit cart and opens checkout; private token prompt, no saved credential |
 | Brevo | Configured beta **10**, production **9**, shared by launch/sold-out forms; list changes not deployed |
 | Meta | Existing edge `ViewContent` and signup `Lead` CAPI pipeline; no implemented purchase sender in that pipeline |
-| Domains | `checkout.flatgirl.net`, `shopify.flatgirl.net`, and separate `account.flatgirl.net` are proposals, not completed configuration |
+| Domains | Final choice: `shopify.flatgirl.net` for checkout, set up per owner; Shopify default account/order-status URLs; apex stays on AWS |
 
 The password/redirect-theme problem occurred during the first proof and was
 subsequently overcome by the owner. Its exact resolution is not recorded. Preserve
@@ -104,14 +107,100 @@ operator availability. If a section grows, split it rather than expand its scope
 
 | Session | Outcome | Dependencies | Estimate | Status |
 | --- | --- | --- | --- | --- |
-| 4 | Beta deployment and full purchase/signup rehearsal | 1–3 | 2–4 hours | **Next** |
-| 5 | Branded checkout/accounts and return navigation | Working beta; domain decision | 1–2 hours plus DNS | Not started |
+| 4 | Beta deployment and full purchase/signup rehearsal | 1–3 | 2–4 hours | Beta running per owner; detailed rehearsal record pending |
+| 5 | Branded checkout/accounts and return navigation | Working beta; domain decision | 1–2 hours plus DNS | **Next**; hostname choices supplied by owner |
 | 6 | Verified Meta and TikTok website purchase attribution | Working checkout, preferably final domains | 2–4 hours | Not started |
 | 7 | Production launch and rollback rehearsal | 4–6; explicit deferrals recorded | 1–2 hours | Not started |
 
 Optional Session 8: TikTok Shop onboarding, inventory/order synchronization, and
 fulfillment rehearsal, about 2–4 hours plus platform review. It can proceed once
 product policies and fulfillment timing are settled, independently of launch.
+
+### Readiness audit — November 16, 2026
+
+This supersedes older "beta not deployed" next-action statements. Historical
+implementation handoffs remain evidence of what was checked at that time.
+
+1. **Branded checkout needs a compatible publication.** The owner has set up
+   `shopify.flatgirl.net`; the checkout adapter, Nuxt runtime allowlist, artifact
+   validator and smoke tool now accept it locally. Publish the compatible build
+   before relying on the new hostname. Validation of archived releases with the
+   original myshopify host list is preserved.
+2. **SEO is still launch work.** A public GET of `https://flatgirl.net/` returned
+   200 with `noindex, nofollow, noarchive` and no canonical tag. The supplied
+   Shopify product URL returned HTTP 404 in this unauthenticated check; that
+   does not establish its Google indexing status or authenticated theme behavior.
+   The Nuxt product page needs its own canonical URL and metadata. Verify the
+   redirect theme's product-to-home mapping and any catalog/feed destinations.
+   Shopify's product SEO editor exposes title, description and URL handle; its
+   listing preview is not evidence of the URL Google has indexed.
+3. **Customer-flow evidence remains incomplete.** Owner-reported beta readiness
+   does not separately establish fresh-browser guest order access, old/new email
+   links after domain changes, return navigation, list-10 signup delivery,
+   inventory/closure behavior or rollback rehearsal. Record completed checks
+   instead of repeating them without cause. Unauthenticated beta access returned
+   401 as expected; this audit did not log in, place orders or submit signups.
+4. **Purchase attribution remains Session 6.** The existing custom Meta pipeline
+   covers ViewContent/Lead. Shopify Meta/TikTok Purchase ownership, matching and
+   duplicate prevention need provider evidence or explicit deferral before paid
+   conversion campaigns. TikTok Shop remains optional and separate.
+
+The selected `shopify.flatgirl.net` checkout host uses a CNAME to
+`shops.myshopify.com` and the Online Store primary-domain target. Accounts and
+order status retain Shopify's default URLs. The apex remains on AWS. See
+[Shopify's checkout/domain guidance](https://shopify.dev/docs/storefronts/hydrogen/deploy/go-live),
+[customer account domains](https://help.shopify.com/en/manual/customers/customer-accounts/customize-customer-accounts/connect-domain-customer-account),
+and [product SEO fields](https://help.shopify.com/en/manual/products/add-update-products).
+The Hydrogen guide's Oxygen-specific apex migration does not apply to this site.
+
+Execution status belongs in the
+[beta workflow](../workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md).
+The [domain cutover workflow](../workflows/20261116_SHOPIFY_BRANDED_DOMAINS.md) is
+now prepared, including the Shopify Settings → Domains steps. The subsequent
+status update below supersedes the initial pending connection/code status.
+No live settings were changed by the agent.
+
+### Domain readiness follow-up — November 16, 2026
+
+The owner reconfirmed beta and selected a single custom checkout hostname,
+`shopify.flatgirl.net`, now set up in Shopify per the owner. Accounts and order
+status use Shopify's default URLs. The owner requested removal of the previous
+custom-domain proposals; this is the final target for code and documentation.
+
+Local adapter, Nuxt runtime, publisher and smoke-tool allowlists now accept
+`shopify.flatgirl.net`, retaining the original API host and myshopify checkout hosts.
+Archived artifacts with the old host list still validate; new builds require the
+expanded list. No new build was published. The locally recorded beta artifact
+`20261116T222528Z-044298cbce3a` still uses the original myshopify-only list.
+Validation for `shopify.flatgirl.net`: web typecheck, 27 adapter/policy tests and
+18 Python commerce/smoke tests passed. Removed the retired custom-hostname
+references from source, tests and documentation; workspace search confirms none remain.
+
+Production readiness still includes committed source (required by the publisher),
+the intended payment mode and production signup list 9, and deliberately removing
+`productionNoindex`, currently true. The previous beta confirmation stands;
+only changed domain behavior needs a fresh targeted check.
+
+### Landing-page SEO follow-up — November 16, 2026
+
+The owner's screenshot confirms the URL concern is Shopify's product search
+listing preview. Local Nuxt implementation now supplies the landing page's title,
+description, canonical `https://flatgirl.net/`, Open Graph/Twitter tags and a share
+photo from the existing image pipeline. `web/public/sitemap.xml` lists the homepage;
+indexable publisher builds advertise it in robots.txt. Existing noindex controls
+remain unchanged. Metadata is scoped to the homepage so policy pages do not claim
+the homepage as their canonical URL. No hardcoded price/stock offer schema is added.
+
+The [SEO launch workflow](../workflows/20261116_STOREFRONT_SEO_LAUNCH.md) covers the
+indexing portion of Session 7. Branded domain setup, full commerce launch readiness
+and provider attribution remain outstanding; no deployment was performed here.
+
+Validation: web typecheck and CDN-image static generation passed, as did all 11
+deployment unit tests. Parsed generated HTML confirms the title/description,
+single canonical, matching social metadata, absolute CDN image/dimensions and
+retained noindex; all five policy pages omit homepage-specific metadata. The
+generated sitemap parses and contains only `https://flatgirl.net/`. No live
+checkout, browser flow, Search Console submission or indexing test was performed.
 
 ## Shared architecture and contracts
 
@@ -669,6 +758,10 @@ results, remaining failures, beta auth procedure, and safe rollback commands.
 
 ## Session 5 — domains and Shopify-hosted customer experience
 
+**Execution workflow:** [Shopify branded domains](../workflows/20261116_SHOPIFY_BRANDED_DOMAINS.md)
+contains the ordered code, DNS and Shopify admin cutover steps. The owner reports
+the domain set up; compatible publication and targeted verification remain pending.
+
 **Outcome:** checkout, order status, emails, and return navigation use a coherent
 brand without adding a custom customer-account implementation.
 
@@ -677,16 +770,15 @@ deployment/access guides, and current Shopify account-domain documentation.
 
 **Execute:**
 
-1. Confirm the owner's final hostname choice. Recommended target is
-   `checkout.flatgirl.net` for checkout and `account.flatgirl.net` for accounts
-   and order status. `shopify.flatgirl.net` remains an alternative, not an agreed
-   change. `flatgirl.myshopify.com` remains usable during implementation.
+1. Use the owner's final choice: `shopify.flatgirl.net` for checkout, with
+   Shopify's default account/order-status URLs. `flatgirl.myshopify.com` remains
+   accepted for compatibility.
 2. Verify how this store's primary Online Store and Customer Accounts domain
    targets interact. Configure Shopify, only the required DNS records, and TLS
    verification; preserve apex/www AWS hosting and all mail records. Never replace
    Shopify's returned checkout hostname by string manipulation.
-3. Set the connected account domain as primary for Customer Accounts. Add the
-   verified hosted orders/account link to the frontend; no OAuth or Customer
+3. Retain Shopify's default Customer Accounts domain. If adding an orders/account
+   link to the frontend, use the verified URL from Shopify; no OAuth or Customer
    Account API integration. Configure checkout/account branding and support links.
 4. Verify new and prior order-email links, guest verification, account login,
    logo/continue-shopping navigation, and redirect-theme behavior. Ensure an
@@ -695,8 +787,8 @@ deployment/access guides, and current Shopify account-domain documentation.
 5. Update checkout host allowlists, smoke-test expectations, build configuration,
    and the runbook. Record the actual domain choices and DNS/Shopify state.
 
-Shopify documents a distinct customer-account domain covering order-status
-pages. Confirm the exact UI and prerequisites for this store before DNS edits.
+Shopify's default customer-account URL also covers order-status pages; no custom
+account domain is part of this rollout.
 [Account-domain reference](https://help.shopify.com/en/manual/customers/customer-accounts/customize-customer-accounts/connect-domain-customer-account)
 
 **Done when:** customer links resolve with valid TLS and correct navigation from
@@ -816,9 +908,9 @@ Otherwise retain the explicit blocker/status without delaying unrelated site wor
 
 | Decision/input | Needed by | Default for local work |
 | --- | --- | --- |
-| Final checkout/account hostname | Session 5 | Current myshopify checkout; no invented account link |
+| Final checkout/account hostname | Session 5 | Owner set up shopify.flatgirl.net; accounts/order status retain Shopify default URLs |
 | Public Storefront token in deployment configuration | Session 2 build; Session 4 beta | Owner reports local access working; no private-token AWS storage needed |
-| Signup lists and sold-out wording | Session 4 / production rollout | Beta 5, production 9 configured locally; existing request reused; no external writes |
+| Signup lists and sold-out wording | Session 4 / production rollout | Beta 10, production 9 configured locally; live list/automation evidence still to record |
 | Per-order quantity cap and allowed destinations | Session 4 | Fixture cap 5; US/USD |
 | Launch time, delivery promise, policies, and payment readiness | Session 7 | Preserve known facts; no invented deadlines |
 

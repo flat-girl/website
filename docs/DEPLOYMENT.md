@@ -9,6 +9,8 @@ For a new machine/operator, complete [access setup](ACCESS.md) first.
 The current production artifact is the scaffold with working signup and temporary
 noindex. Milestone 3 signup is deployed; see [SIGNUP.md](SIGNUP.md).
 It is still publicly accessible. Beta's password does not protect shared images.
+The one-off [storefront SEO launch](workflows/20261116_STOREFRONT_SEO_LAUNCH.md)
+coordinates production indexing headers, HTML metadata, sitemap and Search Console.
 
 ## 1. Review and provision shared resources and beta
 

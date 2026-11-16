@@ -82,6 +82,13 @@ test('checkout validates authoritative quantity, variant, subtotal and returned 
   })
 })
 
+test('branded checkout preserves the returned path and query and keeps the API host', async () => {
+  const checkoutUrl = 'https://shopify.flatgirl.net/checkouts/example?key=fixture-key'
+  const { api, calls } = adapter([productData(), cartData({ checkoutUrl })])
+  expect(await api.createCheckout(input)).toEqual({ checkoutUrl })
+  expect(calls.every(call => call.url === 'https://tepwtx-zw.myshopify.com/api/2026-10/graphql.json')).toBe(true)
+})
+
 for (const [extra, code] of [
   [{ availableForSale: false, quantityAvailable: 0 }, 'SOLD_OUT'],
   [{ quantityAvailable: 1 }, 'QUANTITY_UNAVAILABLE'],
@@ -102,6 +109,11 @@ test('invalid quantity and missing token never send a Shopify request', async ()
 })
 
 for (const [extra, code] of [
+  [{ checkoutUrl: 'http://shopify.flatgirl.net/checkouts/example' }, 'INVALID_CHECKOUT_URL'],
+  [{ checkoutUrl: 'https://shopify.flatgirl.net.evil.example/checkouts/example' }, 'INVALID_CHECKOUT_URL'],
+  [{ checkoutUrl: 'https://user@shopify.flatgirl.net/checkouts/example' }, 'INVALID_CHECKOUT_URL'],
+  [{ checkoutUrl: 'https://shopify.flatgirl.net:8443/checkouts/example' }, 'INVALID_CHECKOUT_URL'],
+  [{ checkoutUrl: 'https://untrusted.example/checkouts/example' }, 'INVALID_CHECKOUT_URL'],
   [{ checkoutUrl: 'http://flatgirl.myshopify.com/checkout' }, 'INVALID_CHECKOUT_URL'],
   [{ checkoutUrl: 'https://flatgirl.myshopify.com.evil.example/checkout' }, 'INVALID_CHECKOUT_URL'],
   [{ checkoutUrl: 'https://user:pass@flatgirl.myshopify.com/checkout' }, 'INVALID_CHECKOUT_URL'],

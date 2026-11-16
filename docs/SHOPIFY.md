@@ -2,8 +2,15 @@
 
 For implementation order, contracts, and fresh-session prompts, use the
 [Shopify integration plan](plans/shopify-integration-plan.md). Sessions 1–2 implement the local UI and static deployment preparation.
-Sold-out signup reuses the existing endpoint: beta list 10, production list 9
-(local configuration; rollout pending). Beta rehearsal is next.
+Sold-out signup reuses the existing endpoint: beta list 10, production list 9.
+The owner reports beta running as of November 16; detailed stack/signup/rehearsal
+evidence remains in the [beta workflow](workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md).
+The owner reports `shopify.flatgirl.net` is set up; follow the
+[Shopify Settings → Domains workflow](workflows/20261116_SHOPIFY_BRANDED_DOMAINS.md)
+for the code prerequisite, DNS, admin settings and customer-link verification.
+Search metadata belongs to the Nuxt landing page; its
+[SEO launch workflow](workflows/20261116_STOREFRONT_SEO_LAUNCH.md) is prepared and
+not yet executed.
 
 The local smoke test targets `tepwtx-zw.myshopify.com`, product
 `15491665297684`, and Storefront API `2026-10`. The default market is US.
@@ -22,8 +29,10 @@ The owner subsequently confirmed the redirect theme is configured and added
 `flatgirl.myshopify.com` as the branded myshopify domain. The smoke test accepts
 checkout URLs on either store hostname, while retaining the original Shopify
 identifier `tepwtx-zw.myshopify.com` for API requests. This is separate from the
-proposed `checkout.flatgirl.net` custom domain, which has not been configured
-or added to the tool's accepted checkout hosts.
+`shopify.flatgirl.net` custom checkout domain, now set up in Shopify per the owner
+and accepted by the local smoke tool/frontend. Accounts and order status use
+Shopify's default URLs. Publication of the updated frontend remains pending;
+see the domain workflow for verification and rollout.
 
 ## Run the proof
 

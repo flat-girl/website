@@ -11,7 +11,7 @@ import warnings
 import webbrowser
 
 SHOP = 'tepwtx-zw.myshopify.com'
-CHECKOUT_HOSTS = {SHOP, 'flatgirl.myshopify.com', 'checkout.shopify.com', 'shopify.com'}
+CHECKOUT_HOSTS = {SHOP, 'flatgirl.myshopify.com', 'shopify.flatgirl.net', 'checkout.shopify.com', 'shopify.com'}
 PRODUCT_ID = 'gid://shopify/Product/15491665297684'
 API_VERSION = '2026-10'
 

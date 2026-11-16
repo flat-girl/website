@@ -4,7 +4,8 @@ import re
 
 POLICY_HANDLES = ('refund-policy', 'privacy-policy', 'shipping-policy', 'terms-of-service', 'contact-information')
 POLICY_FILES = {f'policies/{handle}/{name}' for handle in POLICY_HANDLES for name in ('index.html', '_payload.json')}
-CHECKOUT_HOSTS = 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com'
+LEGACY_CHECKOUT_HOSTS = 'tepwtx-zw.myshopify.com,flatgirl.myshopify.com'
+CHECKOUT_HOSTS = LEGACY_CHECKOUT_HOSTS + ',shopify.flatgirl.net'
 FIELDS = ('storefrontMode', 'commerceSource', 'commerceEndpoint', 'shopifyStorefrontPublicToken', 'checkoutHosts')
 ENV_FIELDS = ('STOREFRONT_MODE', 'COMMERCE_SOURCE', 'COMMERCE_ENDPOINT', 'SHOPIFY_STOREFRONT_PUBLIC_TOKEN', 'CHECKOUT_HOSTS')
 DEFAULTS = ('waitlist', 'shopify', '', '', CHECKOUT_HOSTS)
@@ -13,7 +14,8 @@ DEFAULTS = ('waitlist', 'shopify', '', '', CHECKOUT_HOSTS)
 def validate_public(value, environment):
     if not isinstance(value, dict) or set(value) != {'environment', *FIELDS} or value['environment'] != environment:
         raise ValueError('Commerce settings do not match the destination')
-    if value['storefrontMode'] not in ('waitlist', 'commerce') or value['commerceSource'] != 'shopify' or value['commerceEndpoint'] != '' or value['checkoutHosts'] != CHECKOUT_HOSTS:
+    # Previously published artifacts retain their exact runtime/manifest for rollback.
+    if value['storefrontMode'] not in ('waitlist', 'commerce') or value['commerceSource'] != 'shopify' or value['commerceEndpoint'] != '' or value['checkoutHosts'] not in (CHECKOUT_HOSTS, LEGACY_CHECKOUT_HOSTS):
         raise ValueError('Static commerce requires Shopify public access and the configured checkout hosts')
     token = value['shopifyStorefrontPublicToken']
     if not isinstance(token, str) or (token and (not re.fullmatch(r'[A-Za-z0-9_-]{16,256}', token) or token.lower().startswith(('shp', 'test-', 'fixture-', 'your-')))) or (value['storefrontMode'] == 'commerce' and not token):
@@ -28,6 +30,8 @@ def public_settings(environ, environment):
         fallback = environ.get('FLAT_GIRL_' + suffix, default) if field != 'commerceSource' else default
         value[field] = environ.get('NUXT_PUBLIC_' + suffix, fallback)
     validate_public(value, environment)
+    if value['checkoutHosts'] != CHECKOUT_HOSTS:
+        raise ValueError('New builds must include the branded checkout host')
     private = environ.get('NUXT_SHOPIFY_STOREFRONT_TOKEN')
     if private and value['shopifyStorefrontPublicToken'] == private:
         raise ValueError('Private Storefront token supplied as public token')

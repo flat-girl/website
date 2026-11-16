@@ -1,8 +1,13 @@
 # Beta Shopify commerce migration
 
-**Prepared:** November 16, 2026. **Status: not deployed; live verification pending.**
+**Prepared:** November 16, 2026. **Status: beta running per owner; detailed verification record pending.**
 This is the one-off Session 4 rollout for the locally implemented Sessions 1–3.
 Run all commands from the repository root.
+
+November 16 update: the owner reports beta up and running and Shopify looking
+ready. Do not rerun completed deployment steps solely because the detailed record
+below is incomplete. The readiness audit confirmed unauthenticated beta returns
+401; it did not inspect authenticated checkout, AWS stack state or Brevo delivery.
 
 ## Applicability and prerequisites
 
@@ -112,10 +117,10 @@ control procedure if purchases must stop.
 | --- | --- |
 | Beta signup/list-10 deployment | Pending |
 | Beta policy-router deployment | Pending |
-| Commerce release and publication | Pending |
+| Commerce release and publication | Beta running per owner, November 16; exact release identifier not recorded |
 | Purchase, policy and signup rehearsal | Pending |
 | Waitlist rollback and final beta release | Pending |
 
 Local implementation checks are recorded in the plan handoffs. They are not
-live deployment evidence. Update this record after execution; do not mark the
-workflow complete merely because its instructions exist.
+live deployment evidence. Record remaining stack identifiers and observed flow
+results; the owner report confirms beta is running, not every rehearsal check.
