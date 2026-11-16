@@ -12,7 +12,7 @@ STACKS.update({'signup-beta':'FlatGirlBetaSignup','signup-production':'FlatGirlP
 
 def project():
     path=ROOT/'cloud/aws/project.json'
-    if not path.exists(): raise ValueError('Create cloud/aws/project.json from project.example.json; see cloud/ACCESS.md')
+    if not path.exists(): raise ValueError('Create cloud/aws/project.json from project.example.json; see docs/ACCESS.md')
     p=json.loads(path.read_text())
     if not re.fullmatch(r'\d{12}',p.get('account','')) or p['account']=='111111111111' or p.get('region')!='us-east-1' or p.get('domain')!='flatgirl.net' or not re.fullmatch(r'Z[A-Z0-9]+',p.get('hostedZoneId','')) or p['hostedZoneId']=='ZEXAMPLE':
         raise ValueError('Unresolved or invalid project configuration')
@@ -29,7 +29,7 @@ class AwsError(RuntimeError):
         missing_profile=re.search(r'The config profile \(([^)\r\n]+)\) could not be found',error)
         if missing_profile:
             self.code='ProfileNotFound'
-            super().__init__(f"AWS CLI profile '{missing_profile.group(1)}' is not configured; see cloud/ACCESS.md for role-profile setup")
+            super().__init__(f"AWS CLI profile '{missing_profile.group(1)}' is not configured; see docs/ACCESS.md for role-profile setup")
             return
         match=re.search(r'\(([^)]+)\)',error)
         self.code=match.group(1) if match else 'CLIError'

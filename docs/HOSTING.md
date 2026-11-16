@@ -1,6 +1,6 @@
 # Flat Girl AWS hosting
 
-Infrastructure and deployment tooling for completed milestones 2–3 and local milestone 4 implementation. Hosting and
+Infrastructure and deployment tooling for hosting, signup, Meta event delivery, and the admin dashboard. Hosting and
 signup were deployed by the user. Start with [access setup](ACCESS.md), then follow
 [deployment](DEPLOYMENT.md). [Signup](SIGNUP.md) covers the live notification
 services; [Images](IMAGES.md) describes source recovery and the shared CDN.
@@ -9,10 +9,10 @@ Run `make help` to list the operator commands. The root Makefile calls the Pytho
 tools through uv; there are no shell-wrapper scripts. AWS targets require an
 explicit `PROFILE`, and site targets also require `SITE_ENV`.
 
-The architecture uses seven stacks: access, shared certificate, shared images,
-beta site, production site, beta signup, and production signup. Four private/versioned S3 buckets hold sources plus
-release archives, processed variants, beta, and production. Three CloudFront
-distributions expose the two sites and the processed images. Production and
+The architecture uses eight stacks: access, shared certificate, shared images,
+beta site, production site, beta signup, production signup, and admin. Five private/versioned S3 buckets hold sources plus
+release archives, processed variants, beta, production, and admin. Four CloudFront
+distributions expose the two public-site environments, processed images, and admin. Production and
 images do not depend on beta. Basic Auth protects beta's site files; shared
 images are public. Signup uses separate API/Lambda settings with shared provider
 keys, beta list 5, and production list 4. Both signup services are enabled.
@@ -46,7 +46,8 @@ Templates exceeding the inline size limit fail instead of gaining implicit
 asset-upload privileges. The shared certificate is retained on removal.
 
 [Meta CAPI](META.md) adds environment-specific SQS delivery, durable DynamoDB event records, and Lambda@Edge tracking.
-It is local-only until the operator completes setup and rollout.
+Both environments are deployed; historical upgrades are recorded in
+[dated workflows](workflows/README.md).
 
 The independent [admin dashboard](ADMIN.md) adds an admin stack with a private
 static site, authenticated metrics API, and writable aggregate cache. Existing

@@ -4,7 +4,7 @@
 remain the operating runbook. Password rotation was confirmed by the user; the
 live rollback drill was waived. Resource independence was checked in deployed
 templates; a live beta disable/re-enable drill was not observed. See the
-[completion evidence](../docs/milestone-2-plan.md#live-completion-handoff--november-5-2026).
+[completion evidence](plans/milestone-2-plan.md#live-completion-handoff--november-5-2026).
 For a new machine/operator, complete [access setup](ACCESS.md) first.
 The current production artifact is the scaffold with working signup and temporary
 noindex. Milestone 3 signup is deployed; see [SIGNUP.md](SIGNUP.md).
@@ -31,7 +31,7 @@ adapter uses a mode-600 temporary JSON file, deleted on command completion, to
 keep the digest out of arguments/logs; it never writes the password. Ordinary
 stack updates preserve stored credentials. Existing deployments should first use
 `make beta-auth-migrate PROFILE=flat-girl` after the access update; this preserves
-the password. See [META.md section 6](META.md#6-align-beta-and-production-edge-execution).
+the password. See the [shared-edge migration](workflows/20261106_SHARED_EDGE_MIGRATION.md).
 Beta and production now share viewer handlers and cache settings; the beta router
 authenticates requests before cached content is served.
 
@@ -82,7 +82,7 @@ browser. Offline Chrome checks cover the same frontend with fixture image respon
 
 4. Run `make beta-auth PROFILE=flat-girl`; verify the new credential
    works and the old credential is rejected after the 60-second auth cache expires.
-5. Record results in `docs/milestone-2-plan.md` without passwords or digests.
+5. Record results in `docs/plans/milestone-2-plan.md` without passwords or digests.
 
 Verified publication records are stored with private archives. Rollback requires
 one of these records, validates the exact archived bytes, and reuses the publisher.

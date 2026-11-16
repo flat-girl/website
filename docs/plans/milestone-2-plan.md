@@ -361,7 +361,7 @@ it. Never describe an empty release history as a working rollback target.
 **Makefile targets call the Python tools through uv; see the runbooks for profile names and rollout order.**
 The existing uv project supplies Python dependencies and the CDK package supplies
 infrastructure commands. All commands run from
-the repository root; use the actual profile conventions in [ACCESS.md](../cloud/ACCESS.md).
+the repository root; use the actual profile conventions in [ACCESS.md](../ACCESS.md).
 
 | Purpose | Proposed command | Side effects |
 | --- | --- | --- |
@@ -396,7 +396,7 @@ phase/error and preserve a resumable local journal rather than continuing silent
 | Operator commands | `Makefile` and tested helpers in `tools/` | Prerequisites, private credentials, images, build/publication/verification/rollback |
 | Image tooling | `tools/prepare_images.py`, new focused image modules/tests, `tools/pyproject.toml`, `tools/uv.lock` | Plan/render/stage separation and remote/receipt behavior; lock any added SDK dependency |
 | Frontend/build | `web/nuxt.config.ts`, `web/app/composables/useImages.ts`, `web/package.json`, browser fixtures/tests, `.gitignore` | Explicit local/CDN mode, generated metadata, noindex, public build marker, generated-file exclusions |
-| Documentation | `cloud/{README,ACCESS,IMAGES,DEPLOYMENT}.md`, `README.md`, milestone plans | Exact runbook, resource ownership, credentials/recovery, status and evidence |
+| Documentation | `docs/{HOSTING,ACCESS,IMAGES,DEPLOYMENT}.md`, `docs/README.md`, milestone plans | Exact runbook, resource ownership, credentials/recovery, status and evidence |
 
 Use `.deploy/` for ignored receipts, local reports, manifests, locks, journals,
 and release staging; ignore `cloud/aws/cdk.out/` and local profile configuration.
@@ -466,7 +466,7 @@ Implementation adjustments to the draft:
    without a password/access keys, plus the project roles. Private login setup
    remains user-run; an existing human ARN can be selected instead.
 2. Beta and production publication use separate role profiles, documented in
-   [ACCESS.md](../cloud/ACCESS.md). The operator handles infrastructure/auth/source
+   [ACCESS.md](../ACCESS.md). The operator handles infrastructure/auth/source
    import; publisher roles cannot administer IAM or rotate beta credentials.
 3. AWS CLI JSON via `/dev/stdin` failed on this installation. The adapter uses a
    mode-600 temporary JSON file and deletes it afterward. Plaintext beta passwords

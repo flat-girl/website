@@ -2,7 +2,7 @@
 
 **Beta and production signup are deployed and enabled as of November 5, 2026.**
 The user verified both forms and welcome emails, plus preserved unsubscribe status
-on a beta re-submission. See the [completion evidence and verification limits](../docs/milestone-3-plan.md#completion-handoff--november-5-2026).
+on a beta re-submission. See the [completion evidence and verification limits](plans/milestone-3-plan.md#completion-handoff--november-5-2026).
 
 The numbered rollout steps below are retained for setup/recovery, not outstanding
 closeout tasks. The initial deployment and tagging-failure recovery are complete.
@@ -24,7 +24,7 @@ SSM SecureStrings:
 ```
 
 The public key, list IDs, throttle settings, and enabled flags are in
-[`signup.json`](signup.json). No checkbox, consent attributes, consent timestamps,
+[`signup.json`](../cloud/signup.json). No checkbox, consent attributes, consent timestamps,
 or wording-version tracking is collected. Brevo manages the welcome email.
 Owner notifications use a separate SQS/SES background worker; see
 [NOTIFICATIONS.md](NOTIFICATIONS.md) for setup and the Brevo cutover.
@@ -75,7 +75,7 @@ browser checks below. Keys are shared: rotation affects both environments.
 ## 3. Deploy and verify beta
 
 If you already encountered the initial Stage tagging failure, use the
-[one-time recovery procedure](#recover-the-initial-beta-tagging-failure) before
+[one-time recovery procedure](workflows/20261105_BETA_SIGNUP_TAGGING_RECOVERY.md) before
 retrying. A rolled-back stack and retained log group cannot be recreated in place
 with the normal deploy command.
 
@@ -225,61 +225,17 @@ format, exercises the enabled form, and restores disabled local output afterward
 It does not use the real widget or contact Brevo. Do not publish that fixture;
 use `make site-build` for environment-validated release artifacts.
 
-## Recover the initial beta tagging failure
+## Meta integration
 
-**Historical incident: resolved by the user. Both signup stacks are now live.
-Do not run the deletion commands below against the current working deployment.**
+The resolved [initial beta tagging failure](workflows/20261105_BETA_SIGNUP_TAGGING_RECOVERY.md)
+is retained as a historical recovery workflow, not a normal redeployment step.
 
-Read-only inspection on November 5, 2026 found `FlatGirlBetaSignup` in
-`ROLLBACK_COMPLETE`, termination protection off, and the original Stage creation
-denied `apigateway:TagResource`. The API, certificate, Stage, and alarm were deleted
-by rollback. Only `/aws/lambda/flat-girl-beta-signup` was retained; it has zero
-stored bytes and zero log streams. The signup Lambda was never created.
-
-The corrected access template includes Stage tagging/untagging and domain
-certificate attachment/removal, checked against live CloudFormation resource
-schemas. New signup log groups retain established logs but use
-`RetainExceptOnCreate` to avoid leaving an orphan after a failed initial creation.
-
-1. Apply the corrected access permissions:
-
-   ```sh
-   make cloud-diff PROFILE=default STACK=access
-   make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
-   ```
-
-2. Remove the failed signup stack record and its verified-unused log group.
-   These commands delete only the failed beta signup stack and that exact log
-   group. The existing beta site, production site, images, and SSM secrets are
-   outside this cleanup. The log-group deletion uses the administrator profile
-   because the operator intentionally has no log-deletion permission.
-
-   ```sh
-   aws --profile flat-girl --region us-east-1 cloudformation delete-stack --stack-name FlatGirlBetaSignup
-   aws --profile flat-girl --region us-east-1 cloudformation wait stack-delete-complete --stack-name FlatGirlBetaSignup
-   aws --profile default --region us-east-1 logs delete-log-group --log-group-name /aws/lambda/flat-girl-beta-signup
-   ```
-
-3. Recreate the beta backend:
-
-   ```sh
-   make cloud-deploy PROFILE=flat-girl STACK=signup-beta
-   ```
-
-This cleanup is specific to the failed first deployment observed above. If beta
-signup has since deployed successfully or started receiving requests, inspect its
-current state instead of repeating this deletion procedure. These recovery writes
-remain user-run; the agent only inspected state and changed local source.
-
-
-## Milestone 4 local integration
-
-The new local code includes cookies on signup requests and enables exact-origin
+Signup includes cookies on requests and enables exact-origin
 credentialed CORS. Successful Brevo create/list-write results enqueue a Meta Lead;
 there are no additional Brevo requests. Existing no-write suppression/membership
 branches remain unchanged. Queue failures do not change successful signup responses.
-The Meta worker handles remote delivery separately. These changes are not yet
-live; follow [META.md](META.md) for private credentials, test events and rollout.
+The Meta worker handles remote delivery separately. Follow [META.md](META.md)
+for private credentials, test events and rollout.
 
 The November 6 event-record addition includes the validated signup email in the
 SQS envelope for durable DynamoDB storage. It stays separate from the Meta event,

@@ -290,7 +290,7 @@ production page loads and signup in Events Manager after deployment;
 a real signup may trigger the existing Brevo welcome email.
 
 Record configuration commands, queue/DLQ state, safe delivery outcomes and function versions
-and verification results in `cloud/META.md`. Reuse existing logging/health patterns;
+and verification results in `docs/META.md`. Reuse existing logging/health patterns;
 no new alerting project is required. Disable Meta sends through server configuration
 while leaving signup enabled; stopping cookie capture requires an edge deployment. Rollback
 restores the previous edge version associations and signup code. HTML rollback
@@ -300,7 +300,7 @@ alone does not undo edge tracking; allow for CloudFront propagation.
 
 Before manual regression verification: dataset ID, CAPI token, and a valid
 test code. Beta already has a separate dataset/token; its regression code is `TEST83329`. No new-subscriber/race-condition
-decision remains open. See [the runbook](../cloud/META.md) for executable setup commands.
+decision remains open. See [the runbook](../META.md) for executable setup commands.
 
 Complete when immediate attribution, server-side ViewContent with the GPC gate,
 and the simple signup Lead path work; both events appear in Events Manager;
@@ -325,7 +325,7 @@ and [HTTP API cookie payloads](https://docs.aws.amazon.com/apigateway/latest/dev
 Implemented shared payload/enqueue/delivery code, production viewer edge handling,
 beta origin-response handling preserving Basic Auth, credentialed signup, and
 separate SQS/worker/DLQ/IAM resources. Added private setup/test commands and
-[the operator runbook](../cloud/META.md). Beta uses its dedicated dataset/token
+[the operator runbook](../META.md). Beta uses its dedicated dataset/token
 for normal deployed events. The one-off manual regression harness alone uses
 TEST83329 for beta or TEST72924 for production.
 
@@ -370,7 +370,7 @@ The user confirmed Meta accepted the test events from the manual regression chec
 This validates direct CAPI acceptance. It does not establish deployed edge/cookie,
 SQS, DynamoDB, GPC or signup integration behavior. Next: review/deploy beta signup
 resources and edge changes, then verify both event types through the full pipeline
-using section 3 of [the runbook](../cloud/META.md).
+using section 3 of [the runbook](../META.md).
 
 
 ### Production investigation and local fixes — November 6, 2026
@@ -385,7 +385,8 @@ It also persists independent Dynamo/Meta completion flags so SQS retries skip
 completed work. Configuration gates now live in signup/worker; the edge always
 captures attribution and queues eligible non-GPC views. No visitor/email-level
 ViewContent suppression is introduced. These changes still require the explicit
-IAM, signup-stack and site-stack deployments in runbook section 5.
+IAM, signup-stack and site-stack deployments in the
+[delivery-fix workflow](../workflows/20261106_META_DELIVERY_FIXES.md).
 
 
 Validation of these fixes: 35 infrastructure tests, TypeScript, seven-stack
@@ -406,7 +407,8 @@ A private KVS-to-SSM digest migration preserves the beta password; beta auth run
 before cache lookup, fails closed, and strips Authorization. Production skips
 all auth reads. Dedicated router roles keep SSM away from tracking handlers.
 The existing inline JSON templates are compacted without changing their values.
-The source/migration changes are local until runbook section 6 is executed.
+The source/migration changes were local at this handoff until the
+[shared-edge workflow](../workflows/20261106_SHARED_EDGE_MIGRATION.md) was executed.
 
 Validation of the shared architecture: 36 infrastructure tests, TypeScript and
 seven-stack synthesis passed; 29 Python tests passed. Assertions compare handler

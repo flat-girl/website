@@ -1,6 +1,13 @@
 # Meta Conversions API operations
 
-**Beta and production are deployed. The shared edge architecture is implemented locally; apply the password-preserving migration in section 6 before deploying this revision.**
+**Beta and production are deployed with the shared edge architecture and lifetime worker credential cache.**
+
+Dated upgrade and recovery procedures live separately:
+
+- [Delivery fixes](workflows/20261106_META_DELIVERY_FIXES.md)
+- [Routing-version recovery](workflows/20261106_PRODUCTION_ROUTING_VERSION_RECOVERY.md)
+- [Shared-edge/password-preserving migration](workflows/20261106_SHARED_EDGE_MIGRATION.md)
+- [KMS usage reduction](workflows/20261114_KMS_USAGE_REDUCTION.md)
 
 Both events use SQS. Edge handling captures attribution and queues ViewContent;
 signup queues Lead after an existing successful Brevo create/list write. A worker
@@ -23,13 +30,12 @@ permission to track other visits.
 
 ## 1. Review infrastructure and enter credentials
 
-Use the existing access administrator and operator profiles. No live changes have
-been made by the implementation session.
+Use the existing access administrator and operator profiles. This setup is for
+a new environment; preserve existing credentials on ordinary deployments.
 
 ```sh
 make cloud-diff PROFILE=default STACK=access
 make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
-make beta-auth-migrate PROFILE=flat-girl
 make meta-secrets PROFILE=flat-girl SITE_ENV=beta
 make meta-secrets PROFILE=flat-girl SITE_ENV=production
 ```
@@ -71,11 +77,10 @@ initial read is retried on the next delivery. For a rare credential change, upda
 SSM and explicitly update/recycle the worker so new runtimes load the new value.
 An unchanged CloudFormation deployment does not recycle workers.
 
-## 2. One-off manual regression check against Meta
+## 2. Manual regression check against Meta
 
-For the DynamoDB encryption and credential-cache upgrade, use the
-[beta rollout checklist](#kms-usage-reduction-beta-rollout); the direct Meta test below
-bypasses the worker and cannot verify its cache or the table upgrade.
+This direct Meta test bypasses the worker and cannot verify its credential cache
+or a table upgrade. Use the applicable dated workflow for migration verification.
 
 Run this locally once during setup, or manually after a relevant delivery change.
 It uses the shared Lambda payload/delivery helper with a local transport wrapper
@@ -113,7 +118,6 @@ Deploy the table/queue/worker before associating the edge producer. Apply the
 access-stack update first so the worker can write its own table:
 
 ```sh
-make beta-auth-migrate PROFILE=flat-girl
 make cloud-diff PROFILE=flat-girl STACK=signup-beta
 make cloud-deploy PROFILE=flat-girl STACK=signup-beta
 make cloud-diff PROFILE=flat-girl STACK=beta
@@ -245,136 +249,7 @@ Before calling production verified, check credentialed signup CORS, `_fbc` cooki
 capture/reuse, GPC suppression of ViewContent, and cache hits/misses with separate
 browser cookie jars. Production uses viewer-response tracking on cached HTML;
 confirm attribution does not leak between visitors and canonical redirects/assets
-still work. Record the production verification result here when complete.
-
-## 5. Apply the November 6 delivery fixes to existing deployments
-
-Read-only production inspection found nine edge failures before enqueue, including
-one shortly before the phone signup. The old edge fetched SSM settings and loaded
-AWS SDK clients inside a 500 ms request budget. This was an overly tight deadline,
-not visitor/email deduplication. The failing requests cannot be reconstructed from
-SQS because they never reached it.
-
-The edge now handles cookies/GPC and makes one SQS call. It initializes the SQS
-client during Lambda startup, uses 512 MB memory and a 3-second enqueue deadline,
-and retains one second of the 5-second handler timeout for response handling.
-Cold starts/network waits still add page latency; verify that latency after rollout.
-Eligible `304` page revalidations count too. Restoring a browser tab without making
-a server request cannot produce a server-side ViewContent event.
-[AWS's current Lambda@Edge quotas](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html#limits-lambda-at-edge)
-allow the increased memory. No browser tracking request or new tracking SDK is added.
-
-Runtime switches now control Meta delivery in the worker; the edge continues to
-capture cookies and enqueue eligible views. `CAPTURE_ENABLED`/`--capture` has been
-removed; old `captureEnabled` settings are ignored. Pausing worker delivery does
-not stop archival of already queued events, and outstanding work can reach the DLQ.
-
-The same update adds durable `dynamo_success`/`meta_success` checkpoints. Apply IAM
-first for the worker's new GetItem/UpdateItem permissions, then beta, verify a fresh
-visit/signup, and apply production. Existing credentials/settings remain valid.
-No frontend rebuild or publication is required for this backend update.
-
-```sh
-make cloud-diff PROFILE=default STACK=access
-make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
-make beta-auth-migrate PROFILE=flat-girl
-make cloud-diff PROFILE=flat-girl STACK=signup-beta
-make cloud-deploy PROFILE=flat-girl STACK=signup-beta
-make cloud-diff PROFILE=flat-girl STACK=beta
-make cloud-deploy PROFILE=flat-girl STACK=beta
-make meta-status PROFILE=flat-girl SITE_ENV=beta
-```
-
-After beta verification:
-
-```sh
-make cloud-diff PROFILE=flat-girl STACK=signup-production
-make cloud-deploy PROFILE=flat-girl STACK=signup-production
-make cloud-diff PROFILE=flat-girl STACK=production
-make cloud-deploy PROFILE=flat-girl STACK=production
-make meta-status PROFILE=flat-girl SITE_ENV=production
-```
-
-Wait for CloudFront deployment to finish, reload the page on the phone, and make
-one eligible signup. New ViewContent and Lead rows should show both flags true.
-Use the scan in section 4 and the production dataset's Overview. If a view is
-missing, inspect the named edge outcome in the execution region (the observed
-production requests ran in `us-east-2` and `us-west-1`).
-
-### Earlier production routing-version recovery — November 6
-
-Production's first delivery-fix deployment rolled back because the version-ID
-change tried to publish an unchanged routing Lambda again. AWS rejected it with
-`A version for this Lambda function exists (1)`. Beta has no routing Lambda@Edge
-function, so its deployment succeeded.
-
-The local fix preserves the original routing-version identity. Read-only template
-comparison confirmed no beta changes and no production routing changes; only the
-production tracking Lambda/version and CloudFront association change. Rollback
-finished in `UPDATE_ROLLBACK_COMPLETE`, so retry the normal deployment:
-
-```sh
-make cloud-diff PROFILE=flat-girl STACK=production
-make cloud-deploy PROFILE=flat-girl STACK=production
-```
-
-That version-ID correction required no deletion or repeat beta deployment. It was
-verified against the deployed templates. The subsequent shared-router revision
-below intentionally changes routing code in both environments and publishes new versions.
-
-## 6. Align beta and production edge execution
-
-This supersedes beta's original CloudFront-Function/origin-response arrangement.
-Both distributions now use the exact same handler source files:
-
-| Concern | Shared implementation |
-| --- | --- |
-| Routing | `edge-router.cjs`, Lambda@Edge viewer request |
-| Attribution and ViewContent | `edge.cjs`, Lambda@Edge viewer response |
-| Runtime | Node.js 24, x86_64, 512 MB, 5-second function timeout |
-| Caching | Same cache policy and published object Cache-Control values |
-| Environment configuration | Hostname, queues, cookies, credentials and beta-only Basic Auth/noindex |
-
-CloudFront Functions are suitable for faster lightweight routing, but cannot send
-to SQS. AWS [disallows mixing them with Lambda@Edge viewer handlers](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-function-restrictions-all.html).
-Using shared Lambda@Edge handlers makes beta exercise production's tracking/cache
-path. It is a parity correction, not a claim that Lambda is faster for routing.
-
-Beta auth moves to an SSM SecureString at
-`/flat-girl/beta/authorization-sha256`. The migration copies the existing digest
-from the retained KVS without displaying it or changing the password. Only beta's
-routing role can read that parameter; the tracking role cannot read SSM. Auth reads
-are cached for 60 seconds and fail closed after expiry. Missing credentials return
-503; incorrect/missing Authorization returns 401. Production never reads auth configuration.
-
-Wait for any current deployment to finish. Then apply this revision in order:
-
-```sh
-make cloud-diff PROFILE=default STACK=access
-make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
-make beta-auth-migrate PROFILE=flat-girl
-make cloud-diff PROFILE=flat-girl STACK=beta
-make cloud-deploy PROFILE=flat-girl STACK=beta
-make site-verify PROFILE=flat-girl-beta SITE_ENV=beta
-```
-
-Verify beta still requires the existing password, including for cached assets,
-and that authorized page reloads produce ViewContent records on cache hits.
-Then deploy the same handlers to production:
-
-```sh
-make cloud-diff PROFILE=flat-girl STACK=production
-make cloud-deploy PROFILE=flat-girl STACK=production
-make site-verify PROFILE=flat-girl-production SITE_ENV=production
-make meta-status PROFILE=flat-girl SITE_ENV=production
-```
-
-No frontend rebuild, signup deployment or Meta credential changes are needed for
-this parity revision. For future password rotation, `make beta-auth PROFILE=flat-girl`
-updates both SSM and the retained KVS; allow 60 seconds for auth caches to refresh.
-Keep the KVS for rollback compatibility. IaC tests assert matching triggers,
-cache policy and router source. Synthesized JSON is compacted to keep the existing
-inline-template limit without adding an asset-publishing system.
+still work. Record migration-specific verification in its dated workflow.
 
 ## Queue behavior and recovery
 
@@ -418,95 +293,6 @@ The operator has read-only queue diagnostics, not purge/redrive rights. For reco
 inspect configuration and safe logs first. Any manual redrive needs separately
 scoped access and review of event age/environment; never mint new timestamps
 to make old events appear fresh.
-
-## KMS usage reduction: beta rollout
-
-The November 14, 2026 local revision selects AWS-owned keys for both event tables
-and the admin cache, and caches Meta credentials for each worker runtime's lifetime.
-Infrastructure typechecking, 62 tests, and example/real-account synthesis passed.
-The beta change-set preview `kms-owned-key-cache-20261114` reported no replacement
-for the event table or worker. Beta is now deployed and the user reports its
-regression passed. Read-only verification on November 14 confirmed the original
-table ID, AWS-owned encryption, six readable pre-upgrade records, and two new
-successful ViewContent/Lead records. In the 9:19–9:22 PM America/Chicago test
-window, CloudTrail recorded one Meta-credential decryption for those two deliveries
-and no beta-table KMS calls. Production/admin rollout is also complete, with the
-user reporting a successful manual production regression. Read-only verification
-confirmed both production/admin tables are ACTIVE with AWS-owned encryption and
-their original creation dates, and the deployed production worker contains the
-lifetime credential cache. Actual post-rollout monthly usage has not yet been measured.
-
-The deployed access stack already matches source. Beta signup was behind on owner
-notifications, so this update also added that queue, DLQ, worker, logs, and alarm.
-The user seeded the beta notification thread and reports the beta regression is
-working. Step 2 documents initial setup; reuse the existing thread on subsequent
-rollouts. Existing Meta settings and credentials are preserved. No access
-deployment or frontend publication is required for this check.
-
-1. Deploy the beta backend from this checkout:
-
-   ```sh
-   make cloud-deploy PROFILE=flat-girl STACK=signup-beta
-   make signup-status PROFILE=flat-girl SITE_ENV=beta
-   make meta-status PROFILE=flat-girl SITE_ENV=beta
-   ```
-
-2. Set up beta's separate owner-notification thread and test the deployed worker:
-
-   ```sh
-   make signup-notifications PROFILE=flat-girl SITE_ENV=beta ACTION=status
-   make signup-notifications PROFILE=flat-girl SITE_ENV=beta ACTION=seed
-   ```
-
-   Verify the delivered seed's Message-ID matches the saved ID, as described in
-   [notification setup](NOTIFICATIONS.md#deploy-and-cut-over). If already seeded,
-   reuse the existing thread. Then enable and queue the controlled worker test:
-
-   ```sh
-   make signup-notifications PROFILE=flat-girl SITE_ENV=beta ACTION=enable
-   make signup-notifications PROFILE=flat-girl SITE_ENV=beta ACTION=test
-   ```
-
-   Allow 60 seconds after enabling if the worker has already cached disabled
-   settings. Confirm `high@flatgirl.net` receives the synthetic test in the
-   `[Beta] New Flat Girl Subscriber!` thread. The test creates no Brevo contact
-   or welcome email. Check beta's Brevo workflow for an old owner-notification
-   step to avoid duplicate alerts; preserve the subscriber welcome step.
-
-3. In an authenticated browser with GPC off, load/reload beta several times and
-   submit one controlled email not already in beta list 5. Verify the signup
-   success UI, beta list membership, expected subscriber welcome email, and one
-   owner notification with the controlled email in the same beta thread. Verify
-   new ViewContent and Lead records with `meta_success=true`. Submit the same
-   address again: it should still succeed without another Lead or owner alert.
-   Check the beta dashboard and both Meta/notification DLQs remain empty.
-
-4. Confirm `flat-girl-beta-events` remains the same table and existing records
-   remain readable. The deployed template must show
-   `SSESpecification: { SSEEnabled: false }` (AWS-owned encryption, not plaintext);
-   `describe-table` should no longer show an account KMS key ARN. Inspect only
-   the short test window: worker logs should show successful
-   delivery, and credential decryptions should occur on first use of each warm
-   worker rather than on every event. Multiple cold workers can each decrypt
-   once; do not expect exactly one request across the whole function. Unit tests
-   cover reuse beyond a day, runtime isolation, and retry after invalid/failed reads.
-
-5. After beta passes, review/deploy `signup-production` and `admin` separately.
-   The live template comparison shows only the event-table encryption and shared
-   Meta helper changes in production signup, and only cache-table encryption in admin:
-
-   ```sh
-   make cloud-deploy PROFILE=flat-girl STACK=signup-production
-   make cloud-deploy PROFILE=flat-girl STACK=admin
-   ```
-
-   The admin stack owns its own cache table; deploying beta does not migrate it.
-   Keep production's existing notification thread/settings. After deployment,
-   verify both tables are ACTIVE with AWS-owned keys, open the admin dashboard,
-   and repeat a controlled production signup with its expected emails and Meta
-   delivery. Production notifications do not need to be seeded or enabled again.
-   A static-site rebuild is optional for bringing old beta UI content up to date,
-   but does not exercise either of these backend changes by itself.
 
 ## Durable event records
 
