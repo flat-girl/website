@@ -13,7 +13,7 @@ test('local signup uses the production form and verification flow with the local
     providers.push(route.request().url())
     return route.abort()
   })
-  await page.goto('/')
+  await page.goto('/?commerce=waitlist')
   await expect(page.getByText(/Local preview|Test signup/)).toHaveCount(0)
   await expect(page.locator('#signup-privacy')).toBeVisible()
   await expect.poll(() => page.evaluate(() => (window as any).__signupWidgets?.length)).toBe(1)
@@ -21,22 +21,22 @@ test('local signup uses the production form and verification flow with the local
   const response = page.waitForResponse(response => response.url().endsWith('/api/subscribe'))
   await page.getByRole('button', { name: 'Keep me posted', exact: true }).click()
   expect(await (await response).json()).toEqual({ accepted: true })
-  await expect(page.getByText('Request received; we will be in touch.')).toBeFocused()
+  await expect(page.getByText('Request received; we will reach out. Might need to check your spam...')).toBeFocused()
   expect(providers).toEqual([])
 })
 
 test('backend rejects an invalid email and allows retry after correction', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?commerce=waitlist')
   await page.getByLabel('Email address').fill('not-an-email')
   const submit = page.getByRole('button', { name: 'Keep me posted', exact: true })
   const response = page.waitForResponse(response => response.url().endsWith('/api/subscribe'))
   await submit.click()
   expect((await response).status()).toBe(400)
-  await expect(page.getByRole('alert')).toContainText('Please check your email address and try again.')
+  await expect(page.getByRole('alert')).toContainText('You sure that\'s your email?.')
   await expect(page.getByLabel('Email address')).toHaveValue('not-an-email')
   await page.getByLabel('Email address').fill('reader@example.com')
   await submit.click()
-  await expect(page.getByText('Request received; we will be in touch.')).toBeFocused()
+  await expect(page.getByText('Request received; we will reach out. Might need to check your spam...')).toBeFocused()
 })
 
 test('local endpoint rejects invalid signup input', async ({ request }) => {
@@ -54,14 +54,14 @@ test('local endpoint rejects non-test verification tokens', async ({ request }) 
 })
 
 for (const scenario of [
-  { email: 'rate-limit@example.com', status: 429, message: 'Too many requests right now.' },
-  { email: 'verification@example.com', status: 403, message: 'Please complete a new verification and try again.' },
-  { email: 'server-error@example.com', status: 503, message: 'We couldn’t confirm your signup.' },
-  { email: 'malformed@example.com', status: 200, message: 'We couldn’t confirm your signup.' },
-  { email: 'unexpected@example.com', status: 200, message: 'We couldn’t confirm your signup.' },
+  { email: 'rate-limit@example.com', status: 429, message: 'Rate limited.' },
+  { email: 'verification@example.com', status: 403, message: 'Gotta make sure you\'re not a bot.' },
+  { email: 'server-error@example.com', status: 503, message: 'Not sure what\'s up.' },
+  { email: 'malformed@example.com', status: 200, message: 'Not sure what\'s up.' },
+  { email: 'unexpected@example.com', status: 200, message: 'Not sure what\'s up.' },
 ]) {
   test(`mock scenario ${scenario.email} shows its error and recovers`, async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?commerce=waitlist')
     const email = page.getByLabel('Email address')
     const submit = page.getByRole('button', { name: 'Keep me posted', exact: true })
     await email.fill(scenario.email)
@@ -73,13 +73,13 @@ for (const scenario of [
     await email.fill('reader@example.com')
     await expect(page.getByRole('alert')).toBeEmpty()
     await submit.click()
-    await expect(page.getByText('Request received; we will be in touch.')).toBeFocused()
+    await expect(page.getByText('Request received; we will reach out. Might need to check your spam...')).toBeFocused()
   })
 }
 
 test('mock timeout reaches the browser abort and allows retry', async ({ page }) => {
   await page.clock.install()
-  await page.goto('/')
+  await page.goto('/?commerce=waitlist')
   await page.getByLabel('Email address').fill('timeout@example.com')
   const submit = page.getByRole('button', { name: 'Keep me posted', exact: true })
   const sent = page.waitForRequest(request => request.url().endsWith('/api/subscribe'))
@@ -87,11 +87,11 @@ test('mock timeout reaches the browser abort and allows retry', async ({ page })
   await sent
   await expect(page.getByRole('button', { name: 'Submitting…' })).toBeDisabled()
   await page.clock.fastForward(18001)
-  await expect(page.getByRole('alert')).toContainText('We couldn’t confirm your signup.')
+  await expect(page.getByRole('alert')).toContainText('Not sure what\'s up.')
   await expect(page.getByLabel('Email address')).toHaveValue('timeout@example.com')
   await page.getByLabel('Email address').fill('reader@example.com')
   await submit.click()
-  await expect(page.getByText('Request received; we will be in touch.')).toBeFocused()
+  await expect(page.getByText('Request received; we will reach out. Might need to check your spam...')).toBeFocused()
 })
 
 test('mock addresses are matched after trimming and normalizing case', async ({ request }) => {

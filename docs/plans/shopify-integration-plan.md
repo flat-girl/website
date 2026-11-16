@@ -1,11 +1,13 @@
 # Shopify integration — session plan
 
-**Updated:** November 16, 2026. **Next:** Session 1, local storefront UI.
+**Updated:** November 16, 2026. **Next:** Session 2, static deployment preparation.
 
 This is the current ecommerce plan. The user requested frontend work first so
 the design and purchase states can be iterated locally, followed by separate
-Codex sessions for the remaining integration work. This planning session does
-not implement the storefront or deploy anything.
+Codex sessions for the remaining integration work. Session 1 is implemented locally,
+including mocks and direct Shopify access. The owner reports public-token access
+working in local preview; the generated beta purchase flow is not yet verified.
+No deployment has been performed as part of this implementation.
 
 ## Start a fresh session
 
@@ -18,10 +20,11 @@ next action. If a session needs splitting, record the boundary and remaining wor
 
 Copy this for the next session:
 
-> Implement Session 1 in docs/plans/shopify-integration-plan.md. Start with the
-> local storefront UI and deterministic commerce mocks. Preserve the existing
-> minimal Nuxt design and static hosting. Run the relevant local checks and
-> update the session handoff. Do not connect live services or deploy.
+> Implement Session 2 in docs/plans/shopify-integration-plan.md, using the Session 1
+> handoff and shared types. Prepare public-token static commerce builds, artifact
+> validation, and policy route support in the publisher and edge router. Document
+> Shopify-side purchase controls. Preserve existing signup and hosting; no custom
+> commerce backend is needed. Run local checks and update the handoff. Do not deploy.
 
 For subsequent sessions, replace the session number and use its scope below.
 Plans describe intended work; they are not evidence that it is deployed.
@@ -38,6 +41,8 @@ Plans describe intended work; they are not evidence that it is deployed.
 | Product facts observed in proof | USD 60.00, available for sale; Shopify is the price/availability authority |
 | API version | Smoke test pins Storefront API `2026-10`; recheck support when implementing |
 | API proof | Owner confirmed test purchase through confirmation email on November 16 |
+| Public-token frontend | Owner reports working locally; mocked browser checks cover direct policy requests and no private fallback; generated beta checkout remains unverified |
+| Policies | Owner reports all policies entered in Shopify; final launch review remains |
 | Order-status verification | Access from the email link in a fresh/private browser is not yet explicitly confirmed |
 | Payments | Owner enabled test mode; recheck actual setting before each live test and launch |
 | Local commands | `make shopify-check` reads product; `make shopify-test` creates one-unit cart and opens checkout; private token prompt, no saved credential |
@@ -56,8 +61,9 @@ uncommitted. Treat them as existing work, not generated files to discard.
 ## Decisions and scope
 
 1. Keep Nuxt, Vue, plain CSS, the image pipeline, carousel, photo viewer, and
-   static AWS hosting. Use direct Storefront API calls from a small AWS backend.
-   No Hydrogen migration or production Nuxt server is needed for this release.
+   static AWS hosting. Call the Shopify Storefront API directly from the browser
+   using the public Storefront token. No custom commerce backend, Hydrogen
+   migration, or production Nuxt server is needed for this release.
 2. Sell one configured blanket variant through quantity selection and **Buy now**.
    Shopify owns pricing, stock enforcement, checkout, payments, orders, order
    emails, and hosted order/account pages. No local cart drawer, customer login,
@@ -88,8 +94,8 @@ operator availability. If a section grows, split it rather than expand its scope
 
 | Session | Outcome | Dependencies | Estimate | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Local purchase UI and deterministic mocks | Existing frontend | 2–4 hours | **Next** |
-| 2 | Commerce backend and deployment tooling, checked locally | Session 1 contract | 3–5 hours | Not started |
+| 1 | Local purchase UI, policy pages and deterministic mocks | Existing frontend | 5–7 hours | Implemented locally; ready for review |
+| 2 | Static deployment preparation, checked locally | Session 1 public-token frontend | 1–3 hours | **Next** |
 | 3 | Sold-out Brevo signup and local integration | Session 1 signup contract | 2–3 hours | Not started |
 
 ### Verify and launch
@@ -107,15 +113,16 @@ product policies and fulfillment timing are settled, independently of launch.
 
 ## Shared architecture and contracts
 
-These are proposed interfaces for Session 1 to establish. Once implemented,
-record the actual types here so later sessions implement the same contract.
-Endpoint names below are planned and do not exist yet.
+Session 1 implements the shared types and local endpoints below. In public-token
+mode, `useCommerceRequest.ts` calls the shared Shopify adapter directly in the
+browser and normalizes results into the same response contract. The local Nuxt
+endpoints remain useful for fixtures and optional private-token development; no
+production `/commerce` API is planned. See the Session 1 handoff for policies.
 
 ```mermaid
 flowchart LR
   Visitor[Browser] --> Static[Static Nuxt site on CloudFront]
-  Visitor --> Commerce[Commerce API and Lambda]
-  Commerce --> Storefront[Shopify Storefront API]
+  Visitor -->|Public Storefront token| Storefront[Shopify Storefront API]
   Visitor --> Checkout[Shopify hosted checkout]
   Checkout --> Account[Shopify order status and accounts]
   Visitor --> Signup[Existing signup API and Lambda]
@@ -136,18 +143,25 @@ or `commerce`. Session 1 can default **development only** to mocked commerce.
 Use a narrow service/composable boundary so mocks and live endpoints share types
 and components. Local scenario selection must have no effect in published builds.
 
+Session 2 must remove the current requirement for `FLAT_GIRL_COMMERCE_ENDPOINT`
+when a public Storefront token is configured. That build guard is still present.
+The public token is intentionally included in the static artifact; private
+Storefront/Admin tokens must never be included. The adapter currently reports
+`salesOpen: true` in Shopify mode; waitlist mode is presentation, not a sales lock.
+
 Keep `nitro.preset = 'static'`. Nuxt `server/api` endpoints are local development
 mocks, not deployed services. Guard them with `import.meta.dev`. The publisher
 must reject mock endpoint/settings, localhost handoffs, and fixture data in live
 commerce artifacts. Never put the private token in public runtime config.
 
-### Product and checkout API
+### Product and checkout adapter contract
 
-Planned production paths are `GET /commerce/product` and
-`POST /commerce/checkout` on the environment's existing API hostname. Local
-equivalents use `/api/commerce/product` and `/api/commerce/checkout`.
+Production uses direct Shopify GraphQL calls. Local fixture/private-token
+equivalents remain `/api/commerce/product` and `/api/commerce/checkout`. Status
+codes below are the normalized frontend/local endpoint contract, not proposed
+AWS routes.
 
-Proposed product response:
+Product response:
 
 ```json
 {
@@ -158,18 +172,22 @@ Proposed product response:
     "variantId": "gid://shopify/ProductVariant/68124854681876",
     "title": "Boring Flat Girl Plush Blanket",
     "availableForSale": true,
+    "quantityAvailable": 327,
     "price": { "amount": "60.00", "currencyCode": "USD" }
   },
   "quantityLimit": 5
 }
 ```
 
-`quantityLimit: 5` is a development fixture, not an approved business limit.
-Confirm the live cap before Session 4. Use decimal strings or minor units for
+`quantityLimit: 5` is the owner-approved UI cap. If it must be a hard purchase
+limit, verify and configure enforcement in Shopify before launch. Browser checks
+can be bypassed; a custom proxy would not prevent direct public-token requests.
+`quantityAvailable` is the sellable online quantity or `null` when unavailable;
+327 is only a local fixture, never a production fallback. The edition size is 500. Use decimal strings or minor units for
 money, not floating-point price comparisons. The initial market is US/USD as
 used in the proof; shipping destinations must be confirmed before launch.
 
-Proposed checkout request:
+Checkout adapter input:
 
 ```json
 {
@@ -178,10 +196,10 @@ Proposed checkout request:
 }
 ```
 
-The backend selects the configured product/variant and obtains authoritative
+The shared adapter selects the configured product/variant and obtains authoritative
 pricing from Shopify. The expected price only detects a stale display; it never
 sets the price charged. On success return `201` with `{ "checkoutUrl": "..." }`.
-Do not return/store the cart secret in public pages, logs, or analytics.
+Do not persist cart secrets in static artifacts, logs, or analytics.
 
 | Response | UI behavior |
 | --- | --- |
@@ -210,7 +228,7 @@ still performs the final stock and shipping checks; a cart is not a reservation.
 | Loading | Photos/story visible; neutral purchase-area loading state |
 | Available | Formatted Shopify price, quantity, Buy now |
 | Submitting | Pending feedback, disabled duplicate submission, retained quantity |
-| Sold out | Explicit sold-out message and separate sold-out signup copy |
+| Sold out | Price/shipping and struck-through zero stock remain; disabled Buy now and zero quantity controls, no fulfilment text; separate sold-out signup |
 | Request failed | Inline retry, no false sold-out claim or lost form input |
 | Price or stock changed on Buy | Refresh/announce change before another action |
 
@@ -256,8 +274,8 @@ state locally, without Shopify credentials, AWS, Brevo writes, or outbound track
    component. Keep UI markup independent of Shopify GraphQL. Preserve the current
    photography, responsive layout, typography, carousel, and photo viewer.
 2. Implement quantity/price/Buy now, loading, submitting, retry, sold-out, and
-   sales-closed states. Reuse SignupForm with explicit purpose/copy inputs and
-   launch defaults. Extend only its local mock in this session.
+   sales-closed states. Reuse SignupForm with parent-provided copy, endpoint and request fields.
+   The form has no launch/sold-out mode or purpose prop. Extend only its local mock in this session.
 3. Add deterministic development fixtures for available, sold out, sales closed,
    delayed/error responses, and stock/price changes during purchase. Choose a
    documented dev-only environment setting or query switch. Add no developer
@@ -285,60 +303,255 @@ Turnstile fixtures; ordinary dev Turnstile may still require connectivity.
 actual API types, tests/results, bundle comparison, unresolved design choices.
 No backend, secret storage, DNS, or external app setup in this session.
 
-## Session 2 — commerce backend and operator tooling
+### Session 1 implementation handoff — November 16, 2026
 
-**Outcome:** tested AWS implementation of the Session 1 API, ready for deployment.
+Implemented locally; no deployment or provider configuration. Review at
+`http://localhost:3000/` using `npm run dev --prefix web`. Default development
+uses local commerce; `/?commerce=waitlist` restores the launch form. The
+existing interactive dev server was reused and left running.
 
-**Read:** Session 1 handoff/contracts; `tools/shopify.py`, its tests;
-`cloud/aws/lib/signup-stack.ts`, `access.ts`, `config.ts`, `signup-config.ts`,
-`cloud/aws/lambda/signup.cjs`, `tools/aws_common.py`, `tools/signup.py`,
-`tools/deploy_site.py`, `docs/ACCESS.md`, `docs/DEPLOYMENT.md`.
+**Current UI decisions:**
+
+- Product story, photos and heading remain. Temporary product details removed.
+- Unit price, then **Free Shipping! on its own line**. No subtotal, shipping
+  explanation, cart UI, or Shop Pay/installment messaging.
+- Real-stock contract displays `N of 500 remaining`; unknown quantity omits the
+  count. Quantity starts at 1 and stops at the lesser of stock, API cap and 5.
+- **Fulfilment by Christmas*** uses a plain-text asterisk (not a hyperlink).
+  Its note is at the bottom of the product page. Final dispatch-versus-arrival
+  wording remains a launch content decision.
+- Five centered policy links below the Polis credit. Policy pages use a 64 × 64
+  rounded Flat Girl logo beside bold **Back to blanket**. Legal Notice is deferred
+  pending applicable business requirements.
+
+**Purchase/signup ownership:** `index.vue` owns the single commerce state and
+selects sold-out signup, launch signup when closed, or no signup. `PurchasePanel`
+accepts product/quantity inputs and emits Buy now; it contains no signup forms.
+It stays visible when sold out: price and shipping remain, zero stock is struck
+through, Buy now is disabled, and quantity shows zero with both buttons disabled.
+Fulfilment and its footnote are hidden; signup is spaced below the panel.
+Waitlist-only mode does not fetch commerce data.
+
+**Editable inputs:** `web/app/content/storefront.ts` owns title, description,
+shipping/Christmas copy, edition size and parent signup copy. `SignupForm` takes
+`title`, `description`, `buttonLabel`, `successMessage`, `privacyText`, `endpoint`,
+`siteKey`, optional `extraFields`, `enabled` and `unavailableMessage`. It has no
+purpose enum or conditional launch/sold-out copy. Parents choose the copy and
+request metadata. Launch requests omit purpose; local sold-out requests pass
+`extraFields: { purpose: 'sold_out' }`. Mandatory email/token/honeypot fields
+cannot be replaced by extra fields. Published sold-out submission stays disabled
+until Session 3 is connected. Backend purpose-to-list validation remains required.
+
+**Implementation:** `PurchasePanel.vue`, `useCommerce.ts`, `utils/commerce.ts`,
+`shared/types/commerce.ts`, `pages/index.vue`, `SiteFooter.vue`, and
+`pages/policies/[handle].vue`. Homepage content moved out of `app.vue` to enable
+static policy routes. No new dependency. `nitro.preset` remains static.
+
+**Actual contract:** product JSON above plus `quantityAvailable: number | null`;
+`quantityLimit` is an integer 1–5. Money remains a decimal string in USD.
+Checkout request and 201/error envelope are unchanged. Client validates product
+shape and checkout hosts; explicit timeouts are 10 seconds for product/policies
+and 15 seconds for checkout. Checkout never retries automatically. Conflicts
+refresh state and require another action. Input survives failures, and focus
+moves to signup when a purchase turns into sold-out/closed state.
+
+**Policies:** public-token mode queries Shopify directly; the local equivalent
+is `/api/commerce/policies/:handle`. Handles: `refund-policy`,
+`privacy-policy`, `shipping-policy`, `terms-of-service`, `contact-information`.
+Response: `{ schemaVersion: 1, policy: { handle, title, paragraphs: string[] } }`.
+Missing policy returns 404 with `policy: null`. Text is escaped by Vue, not
+rendered through `v-html`. Local drafts live only in the development server.
+Contact details are deliberately not invented; privacy/contact placeholders and
+other draft wording must be replaced with reviewed store policies before launch.
+
+Shopify Storefront API supports all of these via `shop`, including `legalNotice`.
+The shared adapter queries the pinned API version; these are the supported fields:
+
+```graphql
+query StorePolicies {
+  shop {
+    refundPolicy { title body url }
+    privacyPolicy { title body url }
+    shippingPolicy { title body url }
+    termsOfService { title body url }
+    contactInformation { title body url }
+    legalNotice { title body url }
+  }
+}
+```
+
+The shared adapter sanitizes Shopify HTML into supported rich-text nodes plus
+plain paragraphs. Never insert raw Shopify HTML into the page. Shopify remains
+the editing source, so policy body changes are fetched without rebuilding. Local
+notes, labels and route-list changes require rebuilding. Keep current no-store
+fetches and unavailable/not-configured responses. Verify policy presence and
+redirects before beta. References:
+[Shop](https://shopify.dev/docs/api/storefront/latest/objects/Shop),
+[ShopPolicy](https://shopify.dev/docs/api/storefront/latest/objects/ShopPolicy).
+
+**Session 2 dependencies added by policy routes:** `tools/deploy_site.py` currently
+rejects the new generated policy HTML/payload paths, and
+`cloud/aws/lambda/edge-router.cjs` redirects extensionless paths to `/`.
+Allow only the known policy output paths and map their URLs to the generated
+index documents before beta. Test direct links, refreshes, cache rules, beta auth,
+rollback, and existing redirects. Do not deploy the current artifact as-is.
+The build rejects local/non-HTTPS commerce endpoint settings; publisher-side
+manifest validation and runtime override validation are still Session 2 work.
+
+**Before enabling live stock:** request `quantityAvailable`, verify inventory
+scope and online sellable quantity, disable overselling, and account for any
+replacement units kept aside. A cart is not an inventory reservation. No local
+cart identifier is persisted.
+
+**Local scenarios and checks:** see [DEVELOPMENT.md](../DEVELOPMENT.md#local-commerce-preview).
+Validation: typecheck and both waitlist/commerce generation pass. Local browser
+checks cover 20 commerce cases and 11 signup cases. Generated waitlist checks
+cover 19 cases (four commerce-mode tests intentionally skipped); the explicit
+generated-commerce run passes all five cases. All failed expectations were
+resolved: legacy signup wording, the existing ten-photo carousel, Playwright's
+noscript text filtering, and the new decorative policy logo. No carousel/viewer
+implementation changed. Reviewed desktop (1280px), mobile (375px), and the policy
+header visually. Final generated output is restored to default waitlist mode;
+mock responses and mock-checkout code are absent from client assets.
+
+
+**Bundle comparison:** sum of all generated `_nuxt` JS/CSS files, bytes; gzip
+compresses each file separately with fixed metadata. This is a transfer-size
+proxy, not a measured initial-page waterfall. It includes lazy policy/error chunks.
+
+| Assets | Before raw / gzip | After raw / gzip |
+| --- | --- | --- |
+| JavaScript | 195,095 / 71,061 | 252,697 / 93,825 |
+| CSS | 9,595 / 3,122 | 11,312 / 3,942 |
+
+The increase includes Nuxt routing, purchase states and policy pages. Policy
+links disable prefetch; photo assets and their preparation pipeline are unchanged.
+
+
+### Follow-up: shared Shopify/local source — November 16, 2026
+
+Owner requested live policy editing and one shared source switch. The local
+Nuxt server now supports `FLAT_GIRL_COMMERCE_SOURCE=local|shopify` for products,
+policies and checkout together. Private token is supplied in ignored `web/.env`
+as `NUXT_SHOPIFY_STOREFRONT_TOKEN`. Signup remains a local Brevo mock. The current
+local preview is configured for **Shopify**; source is not a payment-mode switch.
+
+`web/shared/utils/shopify.ts` implements the pinned Storefront reads and cart
+creation. `commerce-source.ts` shares selection and redacted errors across the
+three local endpoint families. `parse5` was the server-side dependency added after
+the initial Session 1 handoff. Shopify HTML becomes escaped paragraphs with
+entities, lists and link URLs preserved; missing policies show as unpublished.
+No fallback from a failed/missing Shopify policy to a local draft.
+
+Verified read-only with the configured token: product USD 60.00, 499 sellable
+units; privacy policy available, refund/shipping/terms/contact policies null at
+the time of the check. These observations are not permanent stock/policy facts.
+The password-protected store accepts the private Headless token; tokenless API
+access returned “Online Store channel is locked.” No storefront password needed
+for these API reads. Payment settings and publication were not changed. No live
+cart/order was created during this verification; checkout validation is covered
+by injected-response service tests.
+
+The development browser suite now refuses non-local source before checkout tests.
+Run `npm run test:commerce:service --prefix web` for the Shopify adapter's offline
+checks. Browser reads verified current privacy content, missing-policy messaging
+and live product stock. Typecheck and generation checked; private token and
+server-only adapter/parser excluded from public output at that stage. The later
+public-token implementation intentionally bundles the shared adapter/parser.
+
+The original AWS commerce-backend proposal is superseded by the public-token
+decision below. Session 2 now covers static build configuration, publisher
+validation, policy URL routing and purchase-control planning. See DEVELOPMENT.md
+for setup.
+
+
+### Policy rich text follow-up — November 16, 2026
+
+Shopify policies now include optional `content: PolicyNode[]` alongside the
+existing `paragraphs` fallback. Nodes are `{ type: "text", text }` or
+`{ type: "element", tag, children, href?, start? }`. See
+`web/shared/utils/policy.ts` for the supported tags and runtime validation.
+`policyContent()` in the Shopify adapter parses HTML into that restricted tree.
+`PolicyRichText.vue` renders it using Vue text nodes and supported elements,
+preserving headings, strong/emphasis, line breaks, lists, tables and safe links.
+Scripts, handlers, arbitrary styles and unsafe URL schemes are not passed through.
+This supersedes the earlier plain-paragraph-only rendering decision; no `v-html`.
+Local drafts and older endpoint responses without `content` still render paragraphs.
+
+Verified the owner's current Shopify refund policy retains bold DISCLAIMER/final
+text and line breaks. Browser checks also covered list numbering, clickable links,
+escaped markup and rejection of unsafe nodes. All 19 service tests, typecheck and
+static generation pass.
+
+### Public Storefront token decision — November 16, 2026
+
+`NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN` now selects direct browser Shopify
+requests for products, policies and cart creation when the source is `shopify`.
+The private token is not used as a fallback. Both transports share validation and
+rich-text sanitization. The owner reports public-token access working in local
+preview. Typecheck, static generation and 21 adapter tests passed; a mocked
+static-browser check verified direct public-header requests, rich text and no
+private fallback on failure. This does not establish a completed beta purchase.
+
+Use public-token browser access for this release. Drop the custom commerce
+Lambda/API Gateway routes, private-token SSM storage/rotation, proxy buyer-IP
+forwarding, proxy throttling and proxy-specific logging/metrics from Session 2.
+Existing signup infrastructure remains required. Purchase restrictions must be
+verified in Shopify, rather than relying on a hidden button or a private proxy.
+See `docs/DEVELOPMENT.md` for local setup.
+
+## Session 2 — static deployment preparation
+
+**Outcome:** public-token static commerce artifacts can be built, validated and
+published with working policy routes; implementation checked locally, no deployment.
+
+**Read:** Session 1 handoff and public-token decision; `web/nuxt.config.ts`,
+`web/app/composables/useCommerceRequest.ts`, `web/shared/utils/shopify.ts`,
+`tools/deploy_site.py`, related build/manifest tests, `cloud/aws/lambda/edge-router.cjs`,
+`cloud/aws/lib/access.ts`, `config.ts`, `docs/ACCESS.md`, `docs/DEPLOYMENT.md`,
+and `docs/SHOPIFY.md`.
 
 **Implement:**
 
-1. Add a dedicated commerce handler/configuration and least-privilege runtime
-   role. Reuse the environment's existing API Gateway/domain, adding routes and
-   GET CORS support without replacing `/subscribe`. The signup stack currently
-   owns those domains: do not provision competing custom-domain mappings.
-2. Add per-environment SSM SecureString token paths, private entry/rotation,
-   read-only preflight, health/status, and sales-switch commands. Suggested
-   command names: `shopify-secrets`, `shopify-preflight`, `shopify-status`,
-   `shopify-sales`; these are not existing commands. Preserve the proof commands.
-3. Implement fixed variant/market, integer quantity cap, price comparison,
-   Shopify cart validation, HTTPS host allowlist, bounded timeouts, and safe
-   errors. Forward buyer IP only from trusted API Gateway request metadata using
-   Shopify's documented server-side header. No generic GraphQL proxy or arbitrary
-   upstream URL. Add sensible route limits independent of the current signup
-   throttles; 3 requests/second for the entire API is not a drop-load plan.
-4. Keep product responses initially `no-store`, or use a measured short cache
-   with an explicit maximum age. Never cache checkout responses. Sales-switch
-   reads must have bounded freshness (target at most 60 seconds) and fail closed.
-   Keep provider secrets out of logs and public artifacts; document rotation/cache
-   behavior using the current SSM/KMS conventions.
-5. Add safe logs/metrics for product and checkout failures, latency, throttles,
-   and configuration failures. Update IAM and inline CDK packaging within existing
-   limits. Add public commerce settings to build manifests and environment
-   validation, preserving older waitlist artifact rollback compatibility.
+1. Allow commerce builds with the public Storefront token without requiring
+   `FLAT_GIRL_COMMERCE_ENDPOINT`. Carry the intended public settings through the
+   build and deployment manifests. Preserve default waitlist builds and the
+   optional private-token local development path; no silent private fallback.
+2. Update artifact/environment validation to reject mock/local settings, missing
+   public commerce configuration, unsafe checkout hosts and beta/production
+   mismatches. Keep private credentials out of artifacts. Preserve compatibility
+   with older waitlist releases for rollback.
+3. Allow the known generated policy HTML/payload paths in the publisher and map
+   their URLs to the correct documents in CloudFront. Verify direct links,
+   refreshes, trailing-slash behavior, caching, beta Basic Auth, existing redirects
+   and rollback. Do not broadly allow arbitrary generated paths.
+4. Document the intended Shopify-side sales opening/closure procedure and decide
+   whether the five-item cap requires hard enforcement. Record what the current
+   store supports and any unresolved requirement. Frontend waitlist mode and
+   quantity validation do not prevent direct API use or invalidate issued checkout
+   URLs. Prepare the procedure here; verify it on beta in Session 4 and at launch
+   in Session 7 without changing live Shopify settings in this session.
+5. Prepare the beta build/deploy/rollback commands and focused checks for generated
+   public-token commerce and policy pages. Preserve the existing signup service;
+   no commerce Lambda, private-token secret storage, new commerce API routes, or
+   proxy-specific operations tooling is required.
 
-**Sales-switch limits:** disabling our endpoint stops new checkout creation after
-the documented cache interval. It does not invalidate checkout URLs already issued
-or disable other sales channels. Emergency sales shutdown also needs an explicit
-Shopify-side procedure, verified in Session 7. A hidden Buy button and CORS are
-not access control or a timed-release mechanism.
+**Done when:** local checks prove that public-token commerce builds without a
+backend URL; artifacts contain no private credentials or mock settings; policy
+routes and previous waitlist rollback work; and purchase-control decisions and
+remaining Shopify verification are documented. This session does not claim beta
+checkout, payment or signup delivery success.
 
-**Done when:** contract tests cover closed sales, stale price, stock races,
-quantity validation, malformed/upstream error responses, cart warnings, timeouts,
-URL validation, and redacted logs. Infrastructure checks prove environment token
-separation, least privilege, preserved signup routes, and allowed origins. Artifact
-tests reject beta/production mismatches and mock settings.
+**Checks:** typecheck and waitlist/commerce generation; focused artifact/publisher
+and edge-router tests; relevant existing frontend adapter/browser tests. Run
+`npm run check --prefix cloud/aws` when modifying AWS routing/infrastructure.
+Use intercepted Shopify responses for repeatable local purchase tests; do not
+create live carts/orders through automated tests. Prepare deployment commands,
+but leave rollout and real customer-flow verification to Session 4.
 
-**Checks:** `npm run check --prefix cloud/aws`, focused Python operator/artifact
-tests, and relevant frontend contract tests. Prepare deploy/diff commands but
-leave live rollout to Session 4. Do not invent credentials or assume permissions
-are already deployed.
-
-**Handoff:** actual endpoints/commands/config paths, role/stack changes, sales
-switch propagation limit, metrics, offline results, and private setup steps.
+**Handoff:** public config/build inputs, manifest/routing changes, local test
+results, deployment/rollback commands, and Shopify-side control decisions or
+unresolved requirements. No deployment in this session.
 
 ## Session 3 — sold-out Brevo audience
 
@@ -390,20 +603,21 @@ audiences, while production continues to serve the waitlist.
 
 **Execute:**
 
-1. Verify account/profile, Shopify product/variant/market, test payment setting,
-   and controlled email recipients. Enter secrets privately and deploy required
-   access/backend changes in the established order. Basic Auth on beta HTML
-   does not protect `beta-api.flatgirl.net`: implement and verify actual beta
-   commerce API protection, not only CORS. Prefer authenticated same-origin
-   routing if compatible with the existing edge design; otherwise document and
-   implement a separate API auth mechanism with no secret embedded in frontend JS.
-2. Build and publish commerce mode to beta only. Validate public endpoints,
-   allowed checkout hosts, account URL if configured, and artifact provenance.
-   Test the generated static build against the real backend, not the dev server.
+1. Verify account/profile, Shopify product/variant/market, public Storefront token,
+   test payment setting and controlled email recipients. Deploy the prepared
+   policy routing and required signup changes in the established order. Beta
+   Basic Auth protects the website, not direct Shopify API access; a public token
+   is intentionally visible. Do not invent a private commerce API to protect it.
+2. Build and publish commerce mode to beta only. Validate direct Shopify requests,
+   signup endpoint, allowed checkout hosts, account URL if configured and artifact
+   provenance. Test the generated static site against Shopify and the signup
+   service, not the local Nuxt server. Verify policy direct links and refreshes.
 3. Exercise successful checkout, declined payment, blocked shipping destination,
    timeout/retry, stale price, stock/quantity change, and sales closure. Use a
    test product/variant configuration for destructive stock/price scenarios.
-   Verify guest checkout and order status in a fresh browser and on mobile.
+   Verify guest checkout and order status in a fresh browser and on mobile. Check
+   Shopify-side quantity/sales restrictions independently of frontend controls,
+   including an already-open page and an already-issued checkout URL.
 4. Submit controlled launch/sold-out signups, including existing and suppressed
    contacts. Verify beta list membership, intended email behavior, owner alerts,
    and unchanged production audiences. Record only non-sensitive evidence.
@@ -420,7 +634,8 @@ test store for ongoing purchase tests afterward.
 
 **Done when:** a purchase originating from beta is confirmed as a test order,
 the email and order-status link work, the sold-out form reaches only the intended
-audience, failure states are usable, and private API access is verified. Successful
+audience, failure states are usable, beta page access is protected, and the
+public-token flow works without a private credential or local API. Successful
 API reads alone do not satisfy this session.
 
 **Handoff:** deployed release/stack/config identifiers, test matrix with observed
@@ -526,16 +741,17 @@ the actual launch, linked from `docs/workflows/README.md`.
    delivery promise. Confirm the intended launch time with the owner; do not infer
    it from historical November/Black Friday copy. Clean committed source is an
    existing production-build requirement; do not commit unrelated changes.
-2. Prepare production backend/configuration with new checkout creation closed.
-   Enter production credentials and real sold-out list IDs. Confirm alarms have
-   an actionable destination, endpoints/config match the production artifact, and
-   beta cannot create real orders through a shared store after cutover.
-3. Rehearse closure and rollback on beta. Archive the current waitlist release.
-   Verify endpoint closure with a previously loaded page and document the separate
-   Shopify action needed to stop already-issued checkouts/other channels. Restoring
-   HTML does not reverse orders, membership changes, emails, or analytics.
+2. Prepare production public-token build configuration, signup service settings
+   and real sold-out list IDs. Keep purchases closed using the verified Shopify
+   procedure. Confirm existing monitoring has an actionable destination and
+   configuration matches the production artifact. Disable beta purchase testing
+   against the shared store at cutover; hiding beta UI does not isolate Shopify.
+3. Rehearse Shopify-side closure and static rollback on beta. Archive the current
+   waitlist release. Verify behavior with a previously loaded page and an issued
+   checkout URL, including other active sales channels. Restoring HTML does not
+   reverse orders, membership changes, emails, analytics or Shopify availability.
 4. At the agreed launch, follow a concrete order for Shopify access/test-mode
-   changes, backend sales enablement, and static publication. Shopify must be ready
+   changes, Shopify-side sales enablement, and static publication. Shopify must be ready
    before exposing Buy now. Verify this store's actual first-launch/password state;
    do not assume a password page can stay enabled for public headless checkout.
    Remove production noindex, use canonical flatgirl.net, and finalize accurate
@@ -575,7 +791,7 @@ Otherwise retain the explicit blocker/status without delaying unrelated site wor
 | Decision/input | Needed by | Default for local work |
 | --- | --- | --- |
 | Final checkout/account hostname | Session 5 | Current myshopify checkout; no invented account link |
-| Private token stored in AWS | Session 4 | No token; deterministic mocks |
+| Public Storefront token in deployment configuration | Session 2 build; Session 4 beta | Owner reports local access working; no private-token AWS storage needed |
 | Sold-out list IDs and audience wording | Session 3 live setup | Mock purpose; no external writes |
 | Per-order quantity cap and allowed destinations | Session 4 | Fixture cap 5; US/USD |
 | Launch time, delivery promise, policies, and payment readiness | Session 7 | Preserve known facts; no invented deadlines |
@@ -598,7 +814,9 @@ Deployment status; external actions and effects:
 Open issues and exact next-session starting point:
 ```
 
-### Planning handoff — November 16, 2026
+### Initial planning handoff — November 16, 2026 (historical)
+
+Superseded by the Session 1 and public-token handoffs above.
 
 Plan written; implementation sessions have not started. API proof and owner
 confirmation email success are preserved as prior evidence. The next session

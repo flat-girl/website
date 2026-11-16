@@ -16,3 +16,6 @@ cloud/aws/cdk.out/
 cloud/aws/project.json
 cloud/aws/profiles.local.json
 .local
+.env
+.env.*
+!.env.example

@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { loadTurnstile, type TurnstileApi } from '~/utils/turnstile'
 
-const config = useRuntimeConfig().public
+const props = withDefaults(defineProps<{
+  title: string
+  description: string
+  buttonLabel: string
+  successMessage: string
+  privacyText: string
+  endpoint: string
+  siteKey: string
+  extraFields?: Record<string, string>
+  enabled?: boolean
+  unavailableMessage?: string
+}>(), { extraFields: () => ({}), enabled: true, unavailableMessage: 'Signup is currently unavailable.' })
 const email = ref('')
 const website = ref('')
 const token = ref('')
@@ -38,7 +49,7 @@ async function verify() {
     if (!mounted.value || current !== attempt || !challenge.value) return
     const active = () => mounted.value && current === attempt && !accepted.value
     widgetId = turnstile.render(challenge.value, {
-      sitekey: config.turnstileSiteKey, action: 'subscribe', theme: 'light',
+      sitekey: props.siteKey, action: 'subscribe', theme: 'light',
       size: 'compact', appearance: 'interaction-only', retry: 'never',
       'response-field': false, 'refresh-expired': 'manual', 'refresh-timeout': 'manual',
       callback: value => {
@@ -60,7 +71,7 @@ async function verify() {
 }
 
 async function submit() {
-  if (!mounted.value || busy.value || accepted.value || !token.value) return
+  if (!props.enabled || !mounted.value || busy.value || accepted.value || !token.value) return
   if (website.value) { message.value = 'Unable to process signup. Please refresh and try again.'; return }
   busy.value = true
   message.value = ''
@@ -71,10 +82,10 @@ async function submit() {
   const timer = window.setTimeout(() => request.abort(), 18000)
   let retry = false
   try {
-    const result = await fetch(config.signupEndpoint, {
+    const result = await fetch(props.endpoint, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       credentials: 'include', redirect: 'error', signal: request.signal,
-      body: JSON.stringify({ email: email.value.trim(), website: website.value, turnstileToken: submittedToken }),
+      body: JSON.stringify({ ...props.extraFields, email: email.value.trim(), website: website.value, turnstileToken: submittedToken }),
     })
     if (!result.ok) {
       if (result.status === 429) message.value = 'Rate limited. Chill for a sec and try again.'
@@ -108,7 +119,7 @@ async function submit() {
 
 onMounted(() => {
   mounted.value = true
-  void verify()
+  if (props.enabled) void verify()
 })
 onBeforeUnmount(() => {
   mounted.value = false
@@ -120,11 +131,12 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="signup" aria-labelledby="signup-heading">
-    <h2 id="signup-heading">Get notified when we drop</h2>
-    <p class="signup-intro">We will let you know as soon as they are available; can't guarantee your spot, but you'll be the first to know.</p>
+    <h2 id="signup-heading" tabindex="-1">{{ title }}</h2>
+    <p class="signup-intro">{{ description }}</p>
     <p v-if="accepted" ref="success" tabindex="-1" role="status" class="signup-success">
-      Request received; we will reach out.<br>Might need to check your spam...
+      {{ successMessage }}
     </p>
+    <p v-else-if="!enabled" role="status" class="signup-help">{{ unavailableMessage }}</p>
     <form v-else :aria-busy="busy" novalidate @submit.prevent="submit">
       <label for="signup-email" class="signup-label">Email address</label>
       <input id="signup-email" v-model="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"
@@ -141,11 +153,11 @@ onBeforeUnmount(() => {
       </div>
       <p id="signup-message" role="alert" class="signup-error">{{ message }}</p>
       <button type="submit" :disabled="!mounted || busy || !token" class="signup-submit">
-        {{ busy ? 'Submitting…' : 'Keep me posted' }}
+        {{ busy ? 'Submitting…' : buttonLabel }}
       </button>
       <p v-if="!mounted" class="signup-help">Enable JavaScript to sign up; gotta ensure you're not a bot.</p>
     </form>
-    <p id="signup-privacy" class="signup-privacy">You can unsubscribe if you feel like it, but we recommend against it.</p>
+    <p id="signup-privacy" class="signup-privacy">{{ privacyText }}</p>
   </section>
 </template>
 
@@ -215,6 +227,7 @@ form,
 }
 
 .signup-success {
+  white-space: pre-line;
   border: 1px solid #15803d;
   border-radius: 0.25rem;
   padding: 1rem;
