@@ -16,6 +16,7 @@ cloud/aws/cdk.out/
 cloud/aws/project.json
 cloud/aws/profiles.local.json
 .local
+.shopify
 .env
 .env.*
 !.env.example
