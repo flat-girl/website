@@ -13,6 +13,7 @@ repository root, even when the guide is inside `docs/workflows/`.
 | [Deployment](DEPLOYMENT.md) | Publishing, verification, and rollback |
 | [Images](IMAGES.md) | Image imports, variants, and source recovery |
 | [Signup](SIGNUP.md) | Turnstile, Brevo, and signup operations |
+| [Shopify](SHOPIFY.md) | Local product/cart proof and manual test checkout |
 | [Meta](META.md) | Event delivery, credentials, checks, and queue recovery |
 | [Notifications](NOTIFICATIONS.md) | Subscriber owner alerts and failure handling |
 | [Admin](ADMIN.md) | Dashboard, aggregate cache, and admin deployment |

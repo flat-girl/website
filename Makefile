@@ -44,6 +44,8 @@ help:
 	  '  make signup-status PROFILE=flat-girl SITE_ENV=beta' \
 	  '  make signup-enabled PROFILE=flat-girl SITE_ENV=beta ENABLED=false DRY_RUN=1' \
 	  '  make signup-notifications PROFILE=flat-girl SITE_ENV=production ACTION=status|seed|enable|test|disable' \
+	  '  make shopify-check  (read product only; private token prompt)' \
+	  '  make shopify-test  (create one-unit cart and open checkout; private token prompt)' \
 	  '' \
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
 	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
@@ -53,6 +55,13 @@ help:
 
 cloud-preflight:
 	$(PYTHON) tools/cloud.py preflight $(profile) --read-only
+
+.PHONY: shopify-check shopify-test
+shopify-check:
+	$(PYTHON) tools/shopify.py --read-only
+
+shopify-test:
+	$(no_dry_run)$(PYTHON) tools/shopify.py $(if $(strip $(VARIANT)),--variant $(call quote,$(VARIANT)))
 
 cloud-diff:
 	$(PYTHON) tools/cloud.py diff $(profile) --stack $(call required,STACK)

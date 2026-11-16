@@ -1,5 +1,11 @@
 # Boring Flat Girl — implementation roadmap
 
+**Ecommerce scope update, November 16, 2026:** follow the
+[Shopify integration plan](shopify-integration-plan.md) for the next development
+work. It starts with local storefront UI/mocks and proceeds in separate sessions.
+Its ecommerce decisions supersede this historical roadmap's checkout/payment
+exclusions; the original landing-page milestones below remain implementation history.
+
 Status updated November 6, 2026. Milestones 1–3 are complete for their core scope.
 Beta and production hosting/signup are deployed; the user verified welcome email
 delivery and preserved unsubscribe status. Milestone 4 is implemented and checked
