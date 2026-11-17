@@ -11,6 +11,7 @@ historical procedure, especially one containing cleanup commands.
 
 | Date | Workflow |
 | --- | --- |
+| 2026-11-17 | [Shopify inventory shortcoming documented — custom check required; implementation pending](20261117_SHOPIFY_THEME_DATA_PROOF.md) |
 | 2026-11-16 | [Shopify checkout domain — setup reported; compatible publication pending](20261116_SHOPIFY_BRANDED_DOMAINS.md) |
 | 2026-11-16 | [Storefront SEO launch — prepared; publication pending](20261116_STOREFRONT_SEO_LAUNCH.md) |
 | 2026-11-16 | [Beta Shopify commerce migration — running per owner; verification record pending](20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md) |

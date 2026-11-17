@@ -1,6 +1,36 @@
 # Shopify integration — session plan
 
-**Updated:** November 16, 2026. **Next:** Session 5, branded domains and return navigation; close remaining beta verification evidence.
+**Updated:** November 17, 2026. **Inventory decision:** custom verification needed;
+implementation pending. Storefront/theme reads have not established sufficient
+freshness for an exact displayed count. No source switch has been made.
+
+**Next inventory work:** define and implement the owner's proposed secure Admin
+API check/cache with event-driven refresh, then validate it around stock changes.
+Admin reads and caches also require freshness evidence; they are not assumed
+instantaneous. Scope and acceptance requirements are recorded in the
+[experiment conclusion](../workflows/20261117_SHOPIFY_THEME_DATA_PROOF.md#next-approach--planned-not-implemented).
+This is future work, not an implemented backend. Session 5 and the older session
+handoff below remain separate work.
+
+**Latest local revision:** schema 2 uses product price/availability and the owner's
+requested `product.selected_or_first_available_variant.inventory_quantity` lookup,
+with no hardcoded variant ID or loop. The owner reports successful installation
+and an update arriving before their Admin API read refreshed. The template is
+now under `.shopify/theme/templates/` (Git-ignored); repeatable checks use
+`tools/shopify_stock_check.py`. Repeated stability verification remains pending.
+The following comparison describes the older template.
+
+The owner reports incorrect Storefront inventory and requested a template-based
+proof before considering an Admin API/Lambda cache. The additive product template
+is installed and independently returned 364, matching the owner's Admin reference.
+Ten identical direct Storefront product reads returned 369/370 at 2:32 PM Central.
+At 2:46 PM, with an updated actual count of 358, ten theme reads returned 364
+seven times and 358 three times. The theme failed this stability check.
+US-context reads matched 364 in earlier snapshots, but their repeated stability
+and the cause of the fluctuations remain unverified. Follow the
+[theme-data proof workflow](../workflows/20261117_SHOPIFY_THEME_DATA_PROOF.md).
+The frontend data source is unchanged pending that proof, including cross-origin
+browser access and freshness. The older session handoff below concerns separate work.
 
 This is the current ecommerce plan. The user requested frontend work first so
 the design and purchase states can be iterated locally, followed by separate
@@ -64,6 +94,10 @@ At plan creation, Makefile/docs changes and the Shopify proof script/tests are
 uncommitted. Treat them as existing work, not generated files to discard.
 
 ## Decisions and scope
+
+The November 17 inventory decision above supersedes the earlier no-backend scope
+only for the planned stock-verification service. Existing checkout and policy
+flows remain unchanged; the inventory service is not implemented yet.
 
 1. Keep Nuxt, Vue, plain CSS, the image pipeline, carousel, photo viewer, and
    static AWS hosting. Call the Shopify Storefront API directly from the browser
