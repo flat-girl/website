@@ -3,8 +3,11 @@ import { createShopifyCommerce, policyParagraphs } from '../../shared/utils/shop
 
 const variant = 'gid://shopify/ProductVariant/68124854681876'
 const product = 'gid://shopify/Product/15491665297684'
-const productData = (extra = {}) => ({ node: { id: variant, product: { id: product, title: 'Blanket' },
-  availableForSale: true, quantityAvailable: 499, price: { amount: '60.0', currencyCode: 'USD' }, ...extra } })
+const productData = ({ price = { amount: '60.0', currencyCode: 'USD' }, ...extra }:
+  { price?: { amount: string; currencyCode: string }; [key: string]: unknown } = {}) => ({ product: {
+  id: product, title: 'Blanket', availableForSale: true, totalInventory: 499,
+  variants: { nodes: [{ id: variant, price }] }, ...extra,
+} })
 const cartData = (extra = {}) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
   checkoutUrl: 'https://flatgirl.myshopify.com/checkouts/example', totalQuantity: 2,
   lines: { nodes: [{ quantity: 2, merchandise: { id: variant } }] },
@@ -30,6 +33,32 @@ test('product request uses private header, pinned endpoint and normalized cents'
   expect(calls[0]?.url).toBe('https://tepwtx-zw.myshopify.com/api/2026-10/graphql.json')
   expect(calls[0]?.options.headers).toHaveProperty('Shopify-Storefront-Private-Token', 'test-private-token')
   expect(calls[0]?.options.redirect).toBe('error')
+  const request = JSON.parse(String(calls[0]?.options.body))
+  expect(request.variables).toEqual({ id: product })
+  expect(request.query).toContain('product(id: $id)')
+  expect(request.query).toContain('totalInventory')
+  expect(request.query).not.toContain('quantityAvailable')
+})
+
+test('product inventory controls remaining stock even when variant inventory differs', async () => {
+  const data = productData({ totalInventory: 425 })
+  Object.assign(data.product.variants.nodes[0]!, { quantityAvailable: 443 })
+  expect((await adapter([data]).api.readProduct()).product.quantityAvailable).toBe(425)
+})
+
+test('unknown product inventory stays unknown and invalid inventory fails closed', async () => {
+  expect((await adapter([productData({ totalInventory: null })]).api.readProduct()).product.quantityAvailable).toBeNull()
+  for (const totalInventory of [-1, 1.5, '425', undefined]) {
+    await expect(adapter([productData({ totalInventory })]).api.readProduct())
+      .rejects.toMatchObject({ code: 'INVALID_SHOPIFY_RESPONSE' })
+  }
+})
+
+test('product inventory requires the single expected checkout variant', async () => {
+  for (const nodes of [[], [{ id: 'wrong' }], [{ id: variant }, { id: 'another' }]]) {
+    await expect(adapter([productData({ variants: { nodes } })]).api.readProduct())
+      .rejects.toMatchObject({ code: 'INVALID_SHOPIFY_RESPONSE' })
+  }
 })
 
 test('public access uses only the browser-safe header for product, rich policy and checkout', async () => {
@@ -90,8 +119,8 @@ test('branded checkout preserves the returned path and query and keeps the API h
 })
 
 for (const [extra, code] of [
-  [{ availableForSale: false, quantityAvailable: 0 }, 'SOLD_OUT'],
-  [{ quantityAvailable: 1 }, 'QUANTITY_UNAVAILABLE'],
+  [{ totalInventory: 0 }, 'SOLD_OUT'],
+  [{ totalInventory: 1 }, 'QUANTITY_UNAVAILABLE'],
   [{ price: { amount: '61.00', currencyCode: 'USD' } }, 'PRICE_CHANGED'],
 ] as const) {
   test(`checkout avoids cart creation on ${code}`, async () => {

@@ -114,20 +114,25 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
 
   async function readProduct(): Promise<ProductResponse> {
     const data = await query(`query Blanket($id: ID!) @inContext(country: US) {
-      node(id: $id) { ... on ProductVariant {
-        id availableForSale quantityAvailable price { amount currencyCode } product { id title }
-      } }
-    }`, { id: variantId })
-    const p = data.node
-    if (!p || p.id !== variantId || p.product?.id !== productId || typeof p.product.title !== 'string'
+      product(id: $id) {
+        id title availableForSale totalInventory
+        variants(first: 2) { nodes { id price { amount currencyCode } } }
+      }
+    }`, { id: productId })
+    const p = data.product
+    const variants = p?.variants?.nodes
+    if (!p || p.id !== productId || typeof p.title !== 'string'
       || typeof p.availableForSale !== 'boolean'
-      || (p.quantityAvailable !== null && (!Number.isSafeInteger(p.quantityAvailable) || p.quantityAvailable < 0))) {
+      || (p.totalInventory !== null && (!Number.isSafeInteger(p.totalInventory) || p.totalInventory < 0))
+      || !Array.isArray(variants) || variants.length !== 1 || variants[0]?.id !== variantId) {
       throw new CommerceError(502, 'INVALID_SHOPIFY_RESPONSE')
     }
+    // This single-variant product uses product inventory for display and checkout preflight.
+    // Keep the variant only for its price and Shopify's cart merchandise ID.
     return { schemaVersion: 1, salesOpen: true, quantityLimit: 5, product: {
-      id: productId, variantId, title: p.product.title,
-      availableForSale: p.availableForSale && p.quantityAvailable !== 0,
-      quantityAvailable: p.quantityAvailable, price: money(p.price),
+      id: productId, variantId, title: p.title,
+      availableForSale: p.availableForSale && p.totalInventory !== 0,
+      quantityAvailable: p.totalInventory, price: money(variants[0].price),
     } }
   }
 
