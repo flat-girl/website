@@ -10,7 +10,6 @@ export function fixtureProduct(scenario: string, updated = false): ProductRespon
     quantityLimit: 5,
     product: {
       id: 'gid://shopify/Product/15491665297684',
-      variantId: 'gid://shopify/ProductVariant/68124854681876',
       title: 'Boring Flat Girl Plush Blanket',
       availableForSale: !soldOut,
       quantityAvailable: scenario === 'unknown-stock' ? null : quantity,

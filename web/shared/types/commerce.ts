@@ -7,7 +7,6 @@ export interface ProductResponse {
   salesOpen: boolean
   product: {
     id: string
-    variantId: string
     title: string
     availableForSale: boolean
     quantityAvailable: number | null

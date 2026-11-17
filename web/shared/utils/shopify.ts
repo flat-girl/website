@@ -4,7 +4,7 @@ import { policyTags, safePolicyHref, type PolicyNode } from './policy'
 
 const host = 'tepwtx-zw.myshopify.com'
 const productId = 'gid://shopify/Product/15491665297684'
-const variantId = 'gid://shopify/ProductVariant/68124854681876'
+const checkoutMerchandiseId = 'gid://shopify/ProductVariant/68124854681876'
 const checkoutHosts = [host, 'flatgirl.myshopify.com', 'shopify.flatgirl.net']
 const policyFields: Record<string, string> = {
   'refund-policy': 'refundPolicy', 'privacy-policy': 'privacyPolicy',
@@ -113,26 +113,29 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
   }
 
   async function readProduct(): Promise<ProductResponse> {
-    const data = await query(`query Blanket($id: ID!) @inContext(country: US) {
+    const data = await query(`query Blanket($id: ID!) {
       product(id: $id) {
         id title availableForSale totalInventory
-        variants(first: 2) { nodes { id price { amount currencyCode } } }
+        priceRange {
+          minVariantPrice { amount currencyCode }
+          maxVariantPrice { amount currencyCode }
+        }
       }
     }`, { id: productId })
     const p = data.product
-    const variants = p?.variants?.nodes
     if (!p || p.id !== productId || typeof p.title !== 'string'
       || typeof p.availableForSale !== 'boolean'
-      || (p.totalInventory !== null && (!Number.isSafeInteger(p.totalInventory) || p.totalInventory < 0))
-      || !Array.isArray(variants) || variants.length !== 1 || variants[0]?.id !== variantId) {
+      || (p.totalInventory !== null && (!Number.isSafeInteger(p.totalInventory) || p.totalInventory < 0))) {
       throw new CommerceError(502, 'INVALID_SHOPIFY_RESPONSE')
     }
-    // This single-variant product uses product inventory for display and checkout preflight.
-    // Keep the variant only for its price and Shopify's cart merchandise ID.
+    const price = money(p.priceRange?.minVariantPrice)
+    const maxPrice = money(p.priceRange?.maxVariantPrice)
+    // The storefront offers one price; don't guess if Shopify returns a price range.
+    if (price.amount !== maxPrice.amount) throw new CommerceError(502, 'INVALID_SHOPIFY_RESPONSE')
     return { schemaVersion: 1, salesOpen: true, quantityLimit: 5, product: {
-      id: productId, variantId, title: p.title,
+      id: productId, title: p.title,
       availableForSale: p.availableForSale && p.totalInventory !== 0,
-      quantityAvailable: p.totalInventory, price: money(variants[0].price),
+      quantityAvailable: p.totalInventory, price,
     } }
   }
 
@@ -166,14 +169,14 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
           lines(first: 2) { nodes { quantity merchandise { ... on ProductVariant { id } } } }
         } userErrors { code } warnings { code }
       }
-    }`, { input: { lines: [{ merchandiseId: variantId, quantity }], buyerIdentity: { countryCode: 'US' } } })
+    }`, { input: { lines: [{ merchandiseId: checkoutMerchandiseId, quantity }], buyerIdentity: { countryCode: 'US' } } })
     const result = data.cartCreate
     if (!result || !Array.isArray(result.userErrors) || !Array.isArray(result.warnings)
       || result.userErrors.length || result.warnings.length) throw new CommerceError(503, 'UNAVAILABLE')
     const cart = result.cart
     const lines = cart?.lines?.nodes
     if (!cart || cart.totalQuantity !== quantity || !Array.isArray(lines) || lines.length !== 1
-      || lines[0]?.quantity !== quantity || lines[0]?.merchandise?.id !== variantId) throw new CommerceError(503, 'UNAVAILABLE')
+      || lines[0]?.quantity !== quantity || lines[0]?.merchandise?.id !== checkoutMerchandiseId) throw new CommerceError(503, 'UNAVAILABLE')
     const subtotal = money(cart.cost?.subtotalAmount)
     const unitCents = Number(product.price.amount.replace('.', ''))
     if (Number(subtotal.amount.replace('.', '')) !== unitCents * quantity) throw new CommerceError(409, 'PRICE_CHANGED')

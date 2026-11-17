@@ -6,7 +6,7 @@ const product = 'gid://shopify/Product/15491665297684'
 const productData = ({ price = { amount: '60.0', currencyCode: 'USD' }, ...extra }:
   { price?: { amount: string; currencyCode: string }; [key: string]: unknown } = {}) => ({ product: {
   id: product, title: 'Blanket', availableForSale: true, totalInventory: 499,
-  variants: { nodes: [{ id: variant, price }] }, ...extra,
+  priceRange: { minVariantPrice: price, maxVariantPrice: price }, ...extra,
 } })
 const cartData = (extra = {}) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
   checkoutUrl: 'https://flatgirl.myshopify.com/checkouts/example', totalQuantity: 2,
@@ -38,12 +38,16 @@ test('product request uses private header, pinned endpoint and normalized cents'
   expect(request.query).toContain('product(id: $id)')
   expect(request.query).toContain('totalInventory')
   expect(request.query).not.toContain('quantityAvailable')
+  expect(request.query).not.toContain('variants(')
+  expect(request.query).not.toContain('ProductVariant')
+  expect(result.product).not.toHaveProperty('variantId')
 })
 
-test('product inventory controls remaining stock even when variant inventory differs', async () => {
+test('product inventory and price load without any variant data', async () => {
   const data = productData({ totalInventory: 425 })
-  Object.assign(data.product.variants.nodes[0]!, { quantityAvailable: 443 })
-  expect((await adapter([data]).api.readProduct()).product.quantityAvailable).toBe(425)
+  const result = (await adapter([data]).api.readProduct()).product
+  expect(result.quantityAvailable).toBe(425)
+  expect(result.price).toEqual({ amount: '60.00', currencyCode: 'USD' })
 })
 
 test('unknown product inventory stays unknown and invalid inventory fails closed', async () => {
@@ -54,9 +58,12 @@ test('unknown product inventory stays unknown and invalid inventory fails closed
   }
 })
 
-test('product inventory requires the single expected checkout variant', async () => {
-  for (const nodes of [[], [{ id: 'wrong' }], [{ id: variant }, { id: 'another' }]]) {
-    await expect(adapter([productData({ variants: { nodes } })]).api.readProduct())
+test('missing or differing product prices fail closed', async () => {
+  for (const priceRange of [undefined, {}, {
+    minVariantPrice: { amount: '60.00', currencyCode: 'USD' },
+    maxVariantPrice: { amount: '65.00', currencyCode: 'USD' },
+  }]) {
+    await expect(adapter([productData({ priceRange })]).api.readProduct())
       .rejects.toMatchObject({ code: 'INVALID_SHOPIFY_RESPONSE' })
   }
 })

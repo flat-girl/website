@@ -12,7 +12,7 @@ export function parseProduct(value: unknown): ProductResponse {
   const p = data?.product
   if (data?.schemaVersion !== 1 || typeof data.salesOpen !== 'boolean'
     || !Number.isInteger(data.quantityLimit) || data.quantityLimit < 1 || data.quantityLimit > 5
-    || !p || typeof p.id !== 'string' || !p.id || typeof p.variantId !== 'string' || !p.variantId
+    || !p || typeof p.id !== 'string' || !p.id
     || typeof p.title !== 'string' || typeof p.availableForSale !== 'boolean' || !isMoney(p.price)
     || (p.quantityAvailable !== null && (!Number.isSafeInteger(p.quantityAvailable) || p.quantityAvailable < 0))
     || (p.availableForSale && p.quantityAvailable === 0)) throw new Error('Invalid product response')

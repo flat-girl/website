@@ -8,10 +8,13 @@ test.describe('generated commerce build', () => {
 
   const endpoint = 'https://tepwtx-zw.myshopify.com/api/2026-10/graphql.json'
   const variant = 'gid://shopify/ProductVariant/68124854681876'
-  const product = (available = true) => ({ node: { id: variant,
-    product: { id: 'gid://shopify/Product/15491665297684', title: 'Blanket' },
-    availableForSale: available, quantityAvailable: available ? 499 : 0,
-    price: { amount: '60.00', currencyCode: 'USD' },
+  const product = (available = true) => ({ product: {
+    id: 'gid://shopify/Product/15491665297684', title: 'Blanket',
+    availableForSale: available, totalInventory: available ? 499 : 0,
+    priceRange: {
+      minVariantPrice: { amount: '60.00', currencyCode: 'USD' },
+      maxVariantPrice: { amount: '60.00', currencyCode: 'USD' },
+    },
   } })
   const cart = (quantity: number, checkoutUrl: string) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
     checkoutUrl, totalQuantity: quantity,
