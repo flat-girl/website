@@ -97,7 +97,7 @@ Renew login when a session expires; role chaining can limit session duration.
 | Identity | Intended permission |
 | --- | --- |
 | Administrator | Owns the access stack and private human sign-in setup |
-| Project operator | Manages six named non-access stacks, passes only the CloudFormation role, imports originals, ensures variants, rotates beta auth/shared signup secrets, reads signup health, assumes publisher roles |
+| Project operator | Manages six named non-access stacks, passes only the CloudFormation role, imports originals, ensures variants, invalidates the shared image distribution, rotates beta auth/shared signup secrets, reads signup health, assumes publisher roles |
 | CloudFormation role | Manages hosting plus signup Lambda/API/log/metric/alarm resources and their DNS/certificates; passes only the two signup runtime roles; may create the AWS-managed API Gateway service-linked role |
 | Beta publisher | Beta site writes, shared source reads/variant additions, beta release archives, beta invalidations; no production site writes |
 | Production publisher | Equivalent production scope; no beta site writes |

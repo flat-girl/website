@@ -53,6 +53,7 @@ export class Images extends Base {
       defaultBehavior:{origin:S3BucketOrigin.withOriginAccessControl(variants),viewerProtocolPolicy:cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods:cf.AllowedMethods.ALLOW_GET_HEAD,cachePolicy:cf.CachePolicy.CACHING_OPTIMIZED},
       errorResponses:[403,404].map(httpStatus=>({httpStatus,ttl:Duration.seconds(0)}))})
+    Tags.of(distribution).add('Environment','images')
     this.output('SourceBucketName',sources.bucketName); this.output('VariantsBucketName',variants.bucketName)
     this.output('ImageBaseUrl',`https://${distribution.distributionDomainName}`); this.output('DistributionId',distribution.distributionId)
   }

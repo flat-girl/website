@@ -6,7 +6,8 @@ ordered commands here; operational guides and plan handoffs link to them.
 
 One-time procedures live in `YYYYMMDD_NAME.md` files. Dates identify the original
 rollout or incident, not the date a document was moved. Commands run from the
-repository root. Read the recorded status and prerequisites before using a
+repository root. Put one-off scripts in `scripts/YYYYMMDD_name.py` and link them
+from the matching dated workflow. Read the recorded status and prerequisites before using a
 historical procedure, especially one containing cleanup commands.
 
 | Date | Workflow |

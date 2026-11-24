@@ -6,69 +6,39 @@ Beta and production use the same Shopify store, variants and automatic discount.
 
 ## 1. Prepare the release
 
-- Include the purchase panel, its imported SVG/WebP artwork, two-line cart validation, image tooling and shared image bucket policy in the reviewed release. The lower-left corner currently repeats Sarah as the couch placeholder. Beta can build a dirty tree. Record the build ID and revision, and repeat beta verification if the source changes before production.
+- Include the purchase panel, its imported SVG/WebP artwork, two-line cart validation, image tooling and shared image bucket policy in the reviewed release. The lower-left corner currently repeats Sarah as the couch placeholder. Beta can build a dirty tree. Repeat beta verification if the source changes before production.
 - Use the beta stock override to exercise the purchase panel and its pre-checkout quantity check. Shopify still supplies the product and price and enforces its actual inventory policy on the cart. Temporary backorders are needed only for the live checkout rehearsal at zero blanket stock.
 - Use the reviewed source revision for both builds. Production requires a clean committed tree. Have the shared image operator profile, beta Basic Auth credentials, the public Headless Storefront token, the environment-specific publisher profiles and Shopify inventory access ready.
-- Record each destination's current release ID from its live `/build.json` (beta requires authentication) and confirm its verified archive for rollback. Record current Shopify available quantities, fulfillment location and overselling setting. Check that enough complete packs can ship for the edition and that the automatic discount covers multiple blankets.
+- Before the production launch, record the current production release ID from `https://flatgirl.net/build.json` and confirm its verified archive for rollback. Record current Shopify available quantities, fulfillment location and overselling setting. Check that enough complete packs can ship for the edition and that the automatic discount covers multiple blankets.
 
 ## 2. Restrict the historical Sarah artwork on the shared CDN
 
 Six WebPs from earlier releases returned HTTP 200 without authentication on November 23. Their original checksums match the current `sarah_artwork` PNGs. They include front and back views at 480, 960 and 1696 pixels wide. Removing those entries from the current catalog left the old URLs live. This step affects the image CDN used by both storefronts.
 
-1. Renew the expired AWS source login. From the repository root, preview the **images** stack change. Confirm the variants bucket policy denies CloudFront reads for the historical `sarah-front-*.webp` and `sarah-back-*.webp` objects. Apply the reviewed change. It preserves the private source files, existing S3 object versions and current gallery images.
+1. Renew the expired `default` administrator login. From the repository root, review the **access** stack diff before applying it. The grant gives the `flat-girl` operator permission to create and check invalidations for CloudFront distributions tagged `Project=FlatGirl` and `Environment=images`.
 
    ```sh
-   aws login --profile flat-girl-human --region us-east-1
-   aws sts get-caller-identity --profile flat-girl
+   aws login --profile default --region us-east-1
+   make cloud-diff PROFILE=default STACK=access
+   make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1
+   ```
+
+2. Use the existing `flat-girl` profile for the **images** stack. If its AWS login has expired, renew it with `aws login --profile flat-girl-human --region us-east-1`. Confirm the diff tags the shared distribution and that the stack includes the bucket policy denying CloudFront reads for the historical Sarah variants. Apply the reviewed change.
+
+   ```sh
    make cloud-diff PROFILE=flat-girl STACK=images
    make cloud-deploy PROFILE=flat-girl STACK=images
    ```
 
-2. Invalidate the six old paths on the **FlatGirlImages** distribution. Use the historical release manifest on this workstation. On a fresh workstation, recover that manifest from the private sources bucket archive at `releases/production/20261107T045352Z-b8d1c6096ce4/artifact.tar.gz`. At the prompt, enter an AWS profile authorized to create and wait for invalidations on the shared distribution. The site publisher roles only invalidate their own distributions.
+3. Run the [invalidation script](../../scripts/20261124_invalidate_sarah_artwork.py). It uses the same `flat-girl` profile automatically.
 
    ```sh
-   DROP_IMAGE_DIST=$(aws cloudformation describe-stacks --stack-name FlatGirlImages --profile flat-girl --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue | [0]" --output text)
-   DROP_IMAGE_ORIGIN=$(aws cloudformation describe-stacks --stack-name FlatGirlImages --profile flat-girl --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='ImageBaseUrl'].OutputValue | [0]" --output text)
-   python3 - "${DROP_IMAGE_ORIGIN:?}" <<'PYPATHS'
-   import json, sys
-   from pathlib import Path
-   from uuid import uuid4
-
-   archive = Path('.deploy/releases/production/20261107T045352Z-b8d1c6096ce4/manifest.json')
-   receipt = json.loads(archive.read_text())['images']
-   assert receipt['origin'] == sys.argv[1]
-   names = {f'sarah-{side}-{width}.webp' for side in ('front', 'back') for width in (480, 960, 1696)}
-   paths = sorted('/' + key for key in receipt['objects'] if Path(key).name in names)
-   assert len(paths) == 6 and {Path(key).name for key in paths} == names
-   batch = {'Paths': {'Quantity': 6, 'Items': paths}, 'CallerReference': 'drop2-' + uuid4().hex}
-   Path('.deploy/drop2-sarah-invalidation.json').write_text(json.dumps(batch))
-   PYPATHS
-   read -r DROP_CDN_PROFILE
-   DROP_PURGE=$(aws cloudfront create-invalidation --profile "${DROP_CDN_PROFILE:?}" --distribution-id "${DROP_IMAGE_DIST:?}" --invalidation-batch file://.deploy/drop2-sarah-invalidation.json --query Invalidation.Id --output text)
-   aws cloudfront wait invalidation-completed --profile "${DROP_CDN_PROFILE:?}" --distribution-id "${DROP_IMAGE_DIST:?}" --id "${DROP_PURGE:?}"
+   ./scripts/20261124_invalidate_sarah_artwork.py
    ```
 
-3. Verify all six previously public URLs anonymously. Each must return **403 or 404**. Record the invalidation ID and results. Cached copies previously downloaded to client devices can remain there.
+   The script uses `flat-girl` to look up the image stack, checks the six paths against the historical production manifest, waits for CloudFront, and prints the anonymous HTTP status for each image. Record the invalidation ID and confirm all six return 403 or 404. Copies already downloaded to client devices can remain there.
 
-   ```sh
-   python3 - "${DROP_IMAGE_ORIGIN:?}" <<'PYVERIFY'
-   import json, sys
-   from pathlib import Path
-   from urllib.error import HTTPError
-   from urllib.request import Request, urlopen
-
-   paths = json.loads(Path('.deploy/drop2-sarah-invalidation.json').read_text())['Paths']['Items']
-   for key in paths:
-       try:
-           with urlopen(Request(sys.argv[1] + key, method='HEAD'), timeout=10) as response:
-               status = response.status
-       except HTTPError as error:
-           status = error.code
-       print(Path(key).name, status)
-       if status not in (403, 404):
-           sys.exit('Historical artwork is still accessible. Check the policy and invalidation.')
-   PYVERIFY
-   ```
+   On a fresh workstation, restore `manifest.json` from the private archive `releases/production/20261107T045352Z-b8d1c6096ce4/artifact.tar.gz` to `.deploy/releases/production/20261107T045352Z-b8d1c6096ce4/manifest.json`.
 
 ## 3. Upload the catalog images to S3
 
@@ -106,35 +76,14 @@ export FLAT_GIRL_STOREFRONT_MODE=commerce
 make site-build PROFILE=flat-girl-beta SITE_ENV=beta
 ```
 
-After a successful build, enter its printed beta release ID. Review the dry run before publishing. Live publish prompts for beta Basic Auth and verifies the deployed bytes, content types, image CDN and CloudFront responses. Confirm the authenticated beta `/build.json` matches this release.
+After the build succeeds, publish it with the command below. The publisher selects the latest local beta build and prompts for beta Basic Auth to verify the deployment.
 
 ```sh
-read -r DROP_BETA_RELEASE
-python3 - "${DROP_BETA_RELEASE:?}" <<'PYART'
-import json, sys
-from pathlib import Path
-
-manifest = json.loads((Path('.deploy/releases/beta') / sys.argv[1] / 'manifest.json').read_text())
-assert manifest['release'] == sys.argv[1] and manifest['environment'] == 'beta'
-assert manifest['commerce']['storefrontMode'] == 'commerce'
-keys = {entry['key'] for entry in manifest['files']}
-for stem in ('iou-front', 'iou-back', 'flat-girl-print-small', 'flat-girl-cutline',
-             'holographic-foil', 'laminate-reflection'):
-    matches = [key for key in keys if key.startswith('_nuxt/' + stem + '.')]
-    assert len(matches) == 1, f'Review bundled artwork for {stem}'
-    print(matches[0])
-PYART
-make site-publish PROFILE=flat-girl-beta SITE_ENV=beta RELEASE="${DROP_BETA_RELEASE:?}" DRY_RUN=1
-```
-
-Publish after the artwork check succeeds and the dry run identifies the intended beta destination.
-
-```sh
-make site-publish PROFILE=flat-girl-beta SITE_ENV=beta RELEASE="${DROP_BETA_RELEASE:?}"
+make site-publish PROFILE=flat-girl-beta SITE_ENV=beta
 ```
 
 1. Open [beta with zero stock](https://beta.flatgirl.net/?FORCE_STOCK=0) and confirm sold out. Open [beta with two blankets](https://beta.flatgirl.net/?FORCE_STOCK=2), check the four corner illustrations on mobile and desktop, the small Sarah download, both delivery promises, and verify the quantity selector stops at two. The artwork should appear after loading for both stock states. At zero, verify the disabled button and clear signup form. For the live checkout rehearsal only, enable **Continue selling when out of stock** on the zero-stock blanket if needed. This changes the shared Shopify store. From the two-blanket preview, open separate checkouts for quantities 1 and 2. [Beta with 500 blankets](https://beta.flatgirl.net/?FORCE_STOCK=500) previews the launch count and the usual five-blanket limit.
-2. Verify the following merchandise totals before tax. Enter an eligible US delivery address and confirm the advertised free shipping still applies with the pack. Review the rate name and transit description. The previous checkout showed “Ships starting December 16.” Update the Shopify shipping copy before launch if it still implies the blanket ships before Christmas. Stop before payment. Record both outcomes and the release ID.
+2. Verify the following merchandise totals before tax. Enter an eligible US delivery address and confirm the advertised free shipping still applies with the pack. Review the rate name and transit description. The previous checkout showed “Ships starting December 16.” Update the Shopify shipping copy before launch if it still implies the blanket ships before Christmas. Stop before payment. Record both checkout outcomes.
 
    | Blankets | Blanket line | Pack line | Merchandise total |
    | --- | --- | --- | --- |
@@ -196,7 +145,7 @@ Keep the CDN privacy policy in place during storefront rollback. Choose a verifi
 | Local verification, November 23 | CDN fixture passed typecheck, static generation and site file classification. All 60 Python tests, 35 commerce service tests and 63 infrastructure tests passed. CDK synthesized the updated images stack. Live beta verification pending. |
 | Two-line storefront checkout | Verified November 23 from the local Buy button with live Shopify. Quantities 1 and 2 returned matching free pack quantities and $60 and $120 merchandise subtotals. Both redirected to the Shopify checkout host. Verification stopped before payment. |
 | Purchase panel and release packaging | Implemented locally, including sold-out artwork and a WebP content type for Nuxt assets. Couch illustration uses the Sarah placeholder. Reviewed release revision pending. |
-| Public Sarah variants | Six historical URLs returned HTTP 200 anonymously on November 23. Shared policy prepared locally. Stack deployment, cache invalidation and confirmation of denial pending. |
+| Public Sarah variants | November 23 live images-stack diff confirmed the artwork deny policy is deployed. Only the distribution tag differed. All six anonymous HEAD requests still returned 200. Operator permission, distribution tag, invalidation and confirmation of denial pending. The operator login worked. The administrator login for the access diff had expired. |
 | Catalog upload | Local catalog includes two new IOU PNGs. S3 dry run stopped at an expired AWS login. Source import, variant upload and remote verification pending. |
 | Beta release, quantity 1 and 2 checkouts, shipping, backorders disabled and sold-out verification | Pending |
 | Production build, dry run and previous verified release IDs | Pending |
