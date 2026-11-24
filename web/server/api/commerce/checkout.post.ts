@@ -1,10 +1,12 @@
 import { fixtureProduct } from '../../utils/commerce-fixtures'
+import { previewStockOverride } from '../../../shared/utils/shopify'
 import { shopifySource, commerceResult } from '../../utils/commerce-source'
 
 export default defineEventHandler(async event => {
   if (!import.meta.dev) throw createError({ statusCode: 404 })
   setHeader(event, 'cache-control', 'no-store')
-  const shopify = shopifySource(event)
+  const stockOverride = previewStockOverride(getRequestURL(event))
+  const shopify = shopifySource(event, stockOverride)
   if (shopify) return commerceResult(event, async () => {
     const result = await shopify.createCheckout(await readBody(event))
     setResponseStatus(event, 201)
@@ -25,7 +27,7 @@ export default defineEventHandler(async event => {
   if (scenario === 'checkout-timeout') await new Promise(resolve => setTimeout(resolve, 17000))
   if (scenario === 'checkout-error') return error(503, 'UNAVAILABLE')
   if (scenario === 'rate-limited') return error(429, 'RATE_LIMITED')
-  const data = fixtureProduct(scenario, true)
+  const data = fixtureProduct(scenario, true, stockOverride)
   if (!data.salesOpen) return error(403, 'SALES_CLOSED')
   if (!data.product.availableForSale) return error(409, 'SOLD_OUT')
   if (body.quantity > (data.product.quantityAvailable ?? 5)) return error(409, 'QUANTITY_UNAVAILABLE')

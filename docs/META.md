@@ -4,6 +4,8 @@
 
 Dated upgrade and recovery procedures live separately:
 
+- [View source attribution for admin — implementation and rollout pending](workflows/20261118_VIEW_SOURCE_ATTRIBUTION.md)
+- [Sales dataset migration — implementation and rollout pending](workflows/20261118_META_SALES_DATASET_MIGRATION.md), with its [implementation plan](plans/meta-sales-dataset-plan.md)
 - [Delivery fixes](workflows/20261106_META_DELIVERY_FIXES.md)
 - [Routing-version recovery](workflows/20261106_PRODUCTION_ROUTING_VERSION_RECOVERY.md)
 - [Shared-edge/password-preserving migration](workflows/20261106_SHARED_EDGE_MIGRATION.md)

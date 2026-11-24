@@ -11,6 +11,8 @@ One-off changes retain their existing execution records:
 [production SEO launch](workflows/20261116_STOREFRONT_SEO_LAUNCH.md).
 For a new machine/operator, complete [access setup](ACCESS.md) first.
 
+The [November 24 Stocking Stuffer Pack workflow](workflows/20261124_STOCKING_STUFFER_DROP.md) coordinates beta checkout testing, production publication and the 500-blanket restock.
+
 ## Settings and credentials by operation
 
 | Operation | Required inputs | What it does not need |

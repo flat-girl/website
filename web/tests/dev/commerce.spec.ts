@@ -41,14 +41,28 @@ for (const width of [375, 1280]) {
   })
 }
 
+test('local FORCE_STOCK controls sold out, quantity and mock checkout', async ({ page }) => {
+  await page.goto('/?FORCE_STOCK=0')
+  await expect(page.getByRole('button', { name: 'Sold out', exact: true })).toBeDisabled()
+  await page.goto('/?commerce=sold-out&FORCE_STOCK=2')
+  await expect(page.getByText('Drop 2 - 2 of 500 Remaining', { exact: true })).toBeVisible()
+  const plus = page.getByRole('button', { name: 'Increase quantity' })
+  await plus.click()
+  await expect(plus).toBeDisabled()
+  await page.getByRole('button', { name: 'Buy now', exact: true }).click()
+  await expect(page.getByText('2 blankets selected.')).toBeVisible()
+  await expect(page.getByText('2 × Stocking Stuffer Pack — Free')).toBeVisible()
+})
+
 test('low and unknown inventory never invent a stock count', async ({ page }) => {
   await page.goto('/?commerce=low-stock')
-  await expect(page.getByText('2 of 500 remaining')).toBeVisible()
+  await expect(page.getByText('Drop 2 - 2 of 500 Remaining', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Increase quantity' }).click()
   await expect(page.getByRole('button', { name: 'Increase quantity' })).toBeDisabled()
   await page.goto('/?commerce=unknown-stock')
   await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toBeEnabled()
-  await expect(page.getByText(/of 500 remaining/)).toHaveCount(0)
+  await expect(page.getByText('Drop 1 - 0 of 500 Remaining', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Drop 2 -/)).toHaveCount(0)
 })
 
 test('loading never flashes signup', async ({ page }) => {

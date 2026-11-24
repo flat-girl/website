@@ -30,9 +30,10 @@ export function useCommerce(enabled: MaybeRefOrGetter<boolean> = true) {
     const base = config.commerceEndpoint.replace(/\/$/, '')
     if (!base) throw new Error('Commerce not configured')
     let url = `${base}/${path}`
-    if (import.meta.dev && config.commerceSource === 'local') {
+    if (import.meta.dev) {
       const params = new URLSearchParams()
-      if (typeof route.query.commerce === 'string') params.set('scenario', route.query.commerce)
+      if (typeof route.query.FORCE_STOCK === 'string') params.set('FORCE_STOCK', route.query.FORCE_STOCK)
+      if (config.commerceSource === 'local' && typeof route.query.commerce === 'string') params.set('scenario', route.query.commerce)
       if (updatedFixture) params.set('updated', '1')
       url += `?${params}`
     }

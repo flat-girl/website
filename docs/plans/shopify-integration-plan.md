@@ -1,5 +1,7 @@
 # Shopify integration — session plan
 
+The [Stocking Stuffer Pack launch workflow](../workflows/20261124_STOCKING_STUFFER_DROP.md) tracks the two-line checkout, beta rehearsal and November 24 inventory cutover. Deployment is pending.
+
 **Updated:** November 17, 2026. **Inventory decision:** custom verification needed;
 implementation pending. Storefront/theme reads have not established sufficient
 freshness for an exact displayed count. No source switch has been made.
@@ -834,20 +836,31 @@ changes, propagation status, and any outstanding user-facing issue.
 
 ## Session 6 — Meta and TikTok website attribution
 
+**November 18 Meta destination decision:** the owner cannot change the active ads'
+data source. The website will move to Shopify's existing sales dataset, including
+future waitlist `Lead` events. The [Meta sales dataset plan](meta-sales-dataset-plan.md)
+supersedes this session's earlier destination choice; implementation and rollout
+are pending in the [migration workflow](../workflows/20261118_META_SALES_DATASET_MIGRATION.md).
+**November 22 update:** the owner supplied Meta sales dataset `960038560247114`
+and removed outbound TikTok tracking from scope. Brevo destinations remain
+production list 9 and beta list 10. Admin traffic-source reporting is separate
+from sending conversion events to an advertising platform.
+
 **Outcome:** one purchase is measured once with correct value, currency, product
 identity, and useful attribution across the custom frontend/Shopify boundary.
 
 **Read:** `docs/META.md`, `cloud/aws/lambda/meta.cjs`, `meta-worker.cjs`,
 `edge.cjs`, `edge-router.cjs`, existing analytics tests/admin metric assumptions,
-plus Shopify's Meta channel and TikTok's current integration documentation.
+plus Shopify's Meta channel documentation.
 
 **Execute:**
 
 1. Inventory actual configured pixels/datasets and integrations. Preserve the
-   existing production Meta dataset. Keep `ViewContent` and `Lead` ownership
+   active ads' sales dataset as the production destination under the November 18
+   plan. Keep `ViewContent` and `Lead` ownership
    explicit; a Shopify plugin does not automatically instrument Nuxt pages.
-2. Prefer Shopify's Meta integration for Purchase and TikTok's Shopify integration
-   for web checkout/purchase tracking. Decide whether cart/checkout-intent events
+2. Prefer Shopify's Meta integration for Purchase. No TikTok sender is required.
+   Decide whether cart/checkout-intent events
    are useful for Buy now and define their exact trigger. Never label a button
    click or cart creation as a purchase.
 3. Verify ad-click/UTM and supported identity handoff, consent behavior, value/
@@ -867,8 +880,7 @@ plus Shopify's Meta channel and TikTok's current integration documentation.
 
 Shopify documents server-side purchase sharing through its Meta channel, but
 this storefront's end-to-end attribution still needs observed verification.
-[Meta data sharing](https://help.shopify.com/en/manual/promoting-marketing/analyze-marketing/meta-data-sharing)
-and [TikTok on Shopify](https://ads.tiktok.com/resources/help/article/tiktok-app-shopify?lang=en).
+[Meta data sharing](https://help.shopify.com/en/manual/promoting-marketing/analyze-marketing/meta-data-sharing).
 
 **Done when:** record actual event ownership and test evidence, including any
 platform test-mode limitations. If an ad platform is deferred, record that it is

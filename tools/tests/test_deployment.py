@@ -172,7 +172,11 @@ class DeploymentTests(unittest.TestCase):
             aws.upload=fail
             with self.assertRaisesRegex(ValueError,'injected'):publish_files(aws,{'BucketName':'bucket'},{'files':files},root,{'uploaded':[]})
             self.assertEqual(aws.uploads,['_nuxt/app.js'])
-            for key in ['images/raw/source.png','variants/x/image.webp','.env','_nuxt/source.map','../secret']:
+            self.assertEqual(classify('_nuxt/flat-girl-print-small.abc.webp'),
+                             dict(contentType='image/webp', cacheControl=IMMUTABLE, phase=0))
+            for key in ['images/raw/source.png','variants/x/image.webp','.env','_nuxt/source.map','../secret',
+                        '_nuxt/sarah_artwork_back.hash.png', '_nuxt/flat-girl-holographic-sticker.hash.png',
+                        '_nuxt/product-photos/other.webp']:
                 with self.assertRaises(ValueError):classify(key)
 
     def test_changed_original_is_preserved_and_receipt_rejects_wrong_origin(self):

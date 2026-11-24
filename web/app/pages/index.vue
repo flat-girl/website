@@ -47,7 +47,9 @@ watch(state, async (next, previous) => {
   <main class="product-page">
     <h1>{{ storefront.title }}</h1>
     <SarahCarousel />
-    <p class="description">{{ storefront.description }}</p>
+    <div class="description">
+      <p>Making plush blankets because we can't be the only ones who saw this commercial as kids 🤧</p>
+    </div>
     <div ref="commerceRegion" tabindex="-1">
       <p v-if="state === 'loading'" class="commerce-status" role="status">🤖 LOADING 🤖</p>
       <PurchasePanel v-if="product && (state === 'available' || state === 'sold-out')" v-model:quantity="quantity"

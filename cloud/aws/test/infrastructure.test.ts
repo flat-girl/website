@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import { App } from 'aws-cdk-lib'
-import { Template } from 'aws-cdk-lib/assertions'
+import { Match, Template } from 'aws-cdk-lib/assertions'
 import { config } from '../lib/config.js'
 import { createRequire } from 'node:module'
 const router = createRequire(import.meta.url)('../lambda/edge-router.cjs')
@@ -51,6 +51,15 @@ test('private retained origins; independent sites; no embedded credential',()=>{
     template.hasResourceProperties('AWS::CloudFront::OriginAccessControl',{OriginAccessControlConfig:{SigningBehavior:'always',OriginAccessControlOriginType:'s3'}})
   }
   Template.fromStack(images).resourceCountIs('AWS::S3::Bucket',2)
+  Template.fromStack(images).hasResourceProperties('AWS::S3::BucketPolicy', {
+    PolicyDocument: { Statement: Match.arrayWith([Match.objectLike({
+      Sid: 'KeepSarahArtworkOffCdn', Effect: 'Deny', Action: 's3:GetObject',
+      Principal: { Service: 'cloudfront.amazonaws.com' },
+      Resource: ['front', 'back'].map(side => ({
+        'Fn::Join': ['', [Match.anyValue(), `/variants/*/sarah-${side}-*.webp`]],
+      })),
+    })]) },
+  })
   Template.fromStack(beta).resourceCountIs('AWS::CloudFront::KeyValueStore',1)
   Template.fromStack(prod).resourceCountIs('AWS::CloudFront::KeyValueStore',0)
   assert.ok(!JSON.stringify(Template.fromStack(prod).toJSON()).includes('FlatGirlBeta'))

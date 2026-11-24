@@ -33,7 +33,16 @@ def source_info(path):
                 "width": image.width, "height": image.height}
 
 
+def private_artwork(filename):
+    path = Path(filename.lower().replace('_', '-'))
+    return 'product-photos' in path.parts or path.name.startswith((
+        'sarah-artwork', 'sarah-front-no-outline', 'sarah-back-no-outline', 'flat-girl-holographic-sticker.',
+    ))
+
+
 def image_transforms(source, recipes):
+    if private_artwork(source['file']):
+        raise ValueError(f"Private artwork cannot have public variants: {source['file']}")
     recipe = source.get("recipe", "default")
     if recipe not in {"default", "favicon"}:
         raise ValueError(f"Unknown image recipe: {recipe}")
@@ -77,18 +86,20 @@ def prepare_favicon(image, path, check=False):
     temporary.replace(path)
 
 
-def prepare(root=ROOT, check=False, refresh=False):
+def prepare(root=ROOT, check=False, refresh=False, *, refresh_files=None):
+    """When refreshing, limit accepted source changes to refresh_files if supplied."""
     manifest_path = root / "images/manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() or not refresh else {"images": []}
     if refresh:
         raw = root / "images/raw"
-        paths = sorted(raw.iterdir())
+        paths = sorted(path for path in raw.iterdir() if refresh_files is None or path.name in refresh_files)
         manifest["images"] = [asset for asset in manifest["images"]
-                              if (raw / asset["file"]).is_file()]
+                              if (refresh_files is not None and asset["file"] not in refresh_files)
+                              or (raw / asset["file"]).is_file()]
         files = {asset["file"] for asset in manifest["images"]}
         ids = {asset["id"] for asset in manifest["images"]}
         for path in paths:
-            if (not path.is_file() or path.is_symlink() or path.name.startswith('.') or
+            if (not path.is_file() or path.is_symlink() or path.name.startswith('.') or private_artwork(path.name) or
                     path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or path.name in files):
                 continue
             base = re.sub(r'[^a-z0-9]+', '-', path.stem.lower()).strip('-') or 'image'
@@ -116,7 +127,7 @@ def prepare(root=ROOT, check=False, refresh=False):
         if not source_path.is_file():
             raise ValueError(f"Missing raw image: {source_path}. Restore it or run make images-prepare to accept its removal.")
         actual = source_info(source_path)
-        if refresh:
+        if refresh and (refresh_files is None or asset["file"] in refresh_files):
             asset.update(actual)
         elif any(asset.get(key) != value for key, value in actual.items()):
             raise ValueError(f"Source changed: {asset['file']}. Run make images-prepare for intentional changes.")

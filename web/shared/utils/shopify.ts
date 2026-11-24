@@ -4,7 +4,8 @@ import { policyTags, safePolicyHref, type PolicyNode } from './policy'
 
 const host = 'tepwtx-zw.myshopify.com'
 const productId = 'gid://shopify/Product/15491665297684'
-const checkoutMerchandiseId = 'gid://shopify/ProductVariant/68124854681876'
+const blanketVariantId = 'gid://shopify/ProductVariant/68124854681876'
+const packVariantId = 'gid://shopify/ProductVariant/68279777100052'
 const checkoutHosts = [host, 'flatgirl.myshopify.com', 'shopify.flatgirl.net']
 const policyFields: Record<string, string> = {
   'refund-policy': 'refundPolicy', 'privacy-policy': 'privacyPolicy',
@@ -89,7 +90,18 @@ export function policyParagraphs(html: string): string[] {
   return visit(parseFragment(html)).split(/\n\s*\n/).map(p => p.split('\n').map(l => l.trim()).join('\n').trim()).filter(Boolean)
 }
 
-export function createShopifyCommerce(token: string, fetcher: typeof fetch = fetch, access: 'private' | 'public' = 'private') {
+export function previewStockOverride(url: URL): number | undefined {
+  const local = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(url.hostname)
+  if (!local && url.origin !== 'https://beta.flatgirl.net') return
+  const values = url.searchParams.getAll('FORCE_STOCK')
+  const value = values[0]
+  if (values.length !== 1 || !value || !/^\d+$/.test(value)) return
+  const stock = Number(value)
+  if (Number.isSafeInteger(stock)) return stock
+}
+
+export function createShopifyCommerce(token: string, fetcher: typeof fetch = fetch, access: 'private' | 'public' = 'private',
+  stockOverride?: number) {
   async function query(document: string, variables: Record<string, unknown> = {}) {
     if (!token || /\s/.test(token)) throw new CommerceError(503, 'SHOPIFY_NOT_CONFIGURED')
     let response: Response
@@ -115,7 +127,7 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
   async function readProduct(): Promise<ProductResponse> {
     const data = await query(`query Blanket($id: ID!) {
       product(id: $id) {
-        id title availableForSale totalInventory
+        id title ${stockOverride === undefined ? 'availableForSale totalInventory' : ''}
         priceRange {
           minVariantPrice { amount currencyCode }
           maxVariantPrice { amount currencyCode }
@@ -123,9 +135,11 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
       }
     }`, { id: productId })
     const p = data.product
+    const inventory = stockOverride ?? p?.totalInventory
+    const available = stockOverride === undefined ? p?.availableForSale : stockOverride > 0
     if (!p || p.id !== productId || typeof p.title !== 'string'
-      || typeof p.availableForSale !== 'boolean'
-      || (p.totalInventory !== null && (!Number.isSafeInteger(p.totalInventory) || p.totalInventory < 0))) {
+      || typeof available !== 'boolean'
+      || (inventory !== null && (!Number.isSafeInteger(inventory) || inventory < 0))) {
       throw new CommerceError(502, 'INVALID_SHOPIFY_RESPONSE')
     }
     const price = money(p.priceRange?.minVariantPrice)
@@ -134,8 +148,8 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
     if (price.amount !== maxPrice.amount) throw new CommerceError(502, 'INVALID_SHOPIFY_RESPONSE')
     return { schemaVersion: 1, salesOpen: true, quantityLimit: 5, product: {
       id: productId, title: p.title,
-      availableForSale: p.availableForSale && p.totalInventory !== 0,
-      quantityAvailable: p.totalInventory, price,
+      availableForSale: available && inventory !== 0,
+      quantityAvailable: inventory, price,
     } }
   }
 
@@ -166,20 +180,26 @@ export function createShopifyCommerce(token: string, fetcher: typeof fetch = fet
     const data = await query(`mutation BuyBlanket($input: CartInput!) @inContext(country: US) {
       cartCreate(input: $input) {
         cart { checkoutUrl totalQuantity cost { subtotalAmount { amount currencyCode } }
-          lines(first: 2) { nodes { quantity merchandise { ... on ProductVariant { id } } } }
+          lines(first: 2) { nodes { quantity merchandise { ... on ProductVariant { id } } cost { totalAmount { amount currencyCode } } } }
         } userErrors { code } warnings { code }
       }
-    }`, { input: { lines: [{ merchandiseId: checkoutMerchandiseId, quantity }], buyerIdentity: { countryCode: 'US' } } })
+    }`, { input: { lines: [{ merchandiseId: blanketVariantId, quantity }, { merchandiseId: packVariantId, quantity }],
+      buyerIdentity: { countryCode: 'US' } } })
     const result = data.cartCreate
     if (!result || !Array.isArray(result.userErrors) || !Array.isArray(result.warnings)
       || result.userErrors.length || result.warnings.length) throw new CommerceError(503, 'UNAVAILABLE')
     const cart = result.cart
     const lines = cart?.lines?.nodes
-    if (!cart || cart.totalQuantity !== quantity || !Array.isArray(lines) || lines.length !== 1
-      || lines[0]?.quantity !== quantity || lines[0]?.merchandise?.id !== checkoutMerchandiseId) throw new CommerceError(503, 'UNAVAILABLE')
+    if (!cart || cart.totalQuantity !== 2 * quantity || !Array.isArray(lines) || lines.length !== 2) throw new CommerceError(503, 'UNAVAILABLE')
+    const blanket = lines.find(line => line?.merchandise?.id === blanketVariantId)
+    const pack = lines.find(line => line?.merchandise?.id === packVariantId)
+    if (blanket?.quantity !== quantity || pack?.quantity !== quantity || money(pack.cost?.totalAmount).amount !== '0.00') {
+      throw new CommerceError(503, 'UNAVAILABLE')
+    }
     const subtotal = money(cart.cost?.subtotalAmount)
     const unitCents = Number(product.price.amount.replace('.', ''))
-    if (Number(subtotal.amount.replace('.', '')) !== unitCents * quantity) throw new CommerceError(409, 'PRICE_CHANGED')
+    if (money(blanket.cost?.totalAmount).amount !== subtotal.amount
+      || Number(subtotal.amount.replace('.', '')) !== unitCents * quantity) throw new CommerceError(409, 'PRICE_CHANGED')
     let url: URL
     try { url = new URL(cart.checkoutUrl) } catch { throw new CommerceError(502, 'INVALID_CHECKOUT_URL') }
     if (url.protocol !== 'https:' || url.username || url.password || url.port || !checkoutHosts.includes(url.hostname)) {

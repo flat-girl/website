@@ -238,6 +238,10 @@ the scenario. Persistent errors keep failing until you select another scenario;
 browser tests intercept the next request to verify successful manual retry.
 No scenario selector is added to the product page.
 
+Preview a specific stock level at [localhost with two blankets](http://localhost:3000/?FORCE_STOCK=2).
+Use `0` for sold out or remove the parameter to restore the selected commerce source.
+Local fixtures use the same count at mock checkout. In Shopify mode the store still enforces its inventory policy.
+
 Footer policy pages fetch `/api/commerce/policies/:handle`. Local source returns
 editable drafts that are absent from generated client bundles. Shopify source
 queries the store’s `shop` GraphQL fields on every request, without a content cache. Contact information and

@@ -89,6 +89,12 @@ class ImagesTest(unittest.TestCase):
                 Image.new('RGB', (12, 16)).save(raw / name)
             (raw / '.DS_Store').write_bytes(b'not an image')
             (raw / 'notes.txt').write_text('ignore')
+            for name in ['sarah_artwork_front_no.png', 'sarah_artwork_back.png', 'flat-girl-holographic-sticker.png']:
+                Image.new('RGB', (12, 16)).save(raw / name)
+                with self.assertRaisesRegex(ValueError, 'Private artwork'):
+                    image_transforms(dict(existing, file=name), {})
+            scoped = prepare(root, refresh=True, refresh_files={'New Photo.JPG'})
+            self.assertEqual([item['id'] for item in scoped['images']], ['new-photo', 'new-photo-2'])
             first = prepare(root, refresh=True)
             items = json.loads(manifest.read_text())['images']
             self.assertEqual(items[0], existing)

@@ -4,6 +4,12 @@ The source bucket is private. Only `variants/*` in the separate variants bucket
 is exposed through OAC and the image distribution's HTTPS hostname. Original
 filenames/checksums live in `images/manifest.json`; import preserves their bytes.
 
+Keep working photos in `images/product-photos/`. The raw holographic sticker PNG
+and `sarah_artwork*` files are private design inputs. Image discovery skips them
+and the variant planner rejects them. The Drop 2 workflow covers the historical
+Sarah CDN URLs and the separate uploads for finished coupons and storefront art.
+[Drop 2 image rollout](workflows/20261124_STOCKING_STUFFER_DROP.md)
+
 After adding, replacing, or removing PNG/JPEG/WebP files in `images/raw/`, run the following
 from the repository root. `images-prepare` discovers new files, adds them to the
 manifest, refreshes source metadata and renders local variants. It needs no AWS

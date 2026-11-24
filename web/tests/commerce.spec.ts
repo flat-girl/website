@@ -8,6 +8,7 @@ test.describe('generated commerce build', () => {
 
   const endpoint = 'https://tepwtx-zw.myshopify.com/api/2026-10/graphql.json'
   const variant = 'gid://shopify/ProductVariant/68124854681876'
+  const pack = 'gid://shopify/ProductVariant/68279777100052'
   const product = (available = true) => ({ product: {
     id: 'gid://shopify/Product/15491665297684', title: 'Blanket',
     availableForSale: available, totalInventory: available ? 499 : 0,
@@ -17,8 +18,11 @@ test.describe('generated commerce build', () => {
     },
   } })
   const cart = (quantity: number, checkoutUrl: string) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
-    checkoutUrl, totalQuantity: quantity,
-    lines: { nodes: [{ quantity, merchandise: { id: variant } }] },
+    checkoutUrl, totalQuantity: quantity * 2,
+    lines: { nodes: [
+      { quantity, merchandise: { id: variant }, cost: { totalAmount: { amount: String(quantity * 60), currencyCode: 'USD' } } },
+      { quantity, merchandise: { id: pack }, cost: { totalAmount: { amount: '0', currencyCode: 'USD' } } },
+    ] },
     cost: { subtotalAmount: { amount: String(quantity * 60), currencyCode: 'USD' } },
   } } })
 
@@ -36,7 +40,7 @@ test.describe('generated commerce build', () => {
       const body = route.request().postDataJSON()
       if (body.query.includes('cartCreate')) {
         operations.push('cart')
-        expect(body.variables.input).toEqual({ lines: [{ merchandiseId: variant, quantity: 2 }], buyerIdentity: { countryCode: 'US' } })
+        expect(body.variables.input).toEqual({ lines: [{ merchandiseId: variant, quantity: 2 }, { merchandiseId: pack, quantity: 2 }], buyerIdentity: { countryCode: 'US' } })
         return route.fulfill({ json: { data: cart(2, 'https://flatgirl.myshopify.com/checkout/fixture') } })
       }
       operations.push('product')
@@ -60,8 +64,7 @@ test.describe('generated commerce build', () => {
     await expect(page.locator('.purchase-message')).toContainText('Checkout could not open')
     available = false
     await page.reload()
-    await expect(page.locator('.stock')).toHaveText('Drop 1 - 0 of 500 Remaining')
-    await expect(page.locator('.stock')).toHaveCSS('text-decoration-line', 'line-through')
+    await expect(page.getByText('Drop 2 - 0 of 500 Remaining', { exact: true })).toHaveCSS('text-decoration-line', 'line-through')
     await page.route(signupEndpoint, async route => {
       const body = route.request().postDataJSON()
       expect(Object.keys(body).sort()).toEqual(['email', 'turnstileToken', 'website'])
@@ -78,11 +81,16 @@ test.describe('generated commerce build', () => {
     await page.route(endpoint, route => route.fulfill({ json: { data: product(available) } }))
     await page.goto('/')
     await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toBeEnabled()
+    const firstDrop = page.getByText('Drop 1 - 0 of 500 Remaining', { exact: true })
+    await expect(firstDrop).toHaveCSS('text-decoration-line', 'line-through')
+    await expect(page.getByText('Drop 2 - 499 of 500 Remaining', { exact: true })).toHaveCSS('text-decoration-line', 'none')
     await expect(page.locator('.signup')).toHaveCount(0)
     available = false
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect(page.getByRole('heading', { name: 'Get notified about future drops' })).toBeFocused()
     await expect(page.getByRole('button', { name: 'Sold out', exact: true })).toBeDisabled()
+    await expect(firstDrop).toHaveCSS('text-decoration-line', 'line-through')
+    await expect(page.getByText('Drop 2 - 0 of 500 Remaining', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Selected quantity')).toHaveText('0')
     await expect(page.locator('#fulfillment-note')).toHaveCount(0)
     available = true

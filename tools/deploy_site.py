@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from aws_common import AWS,AwsError,bucket,project
 from image_plan import IMMUTABLE,digest
-from prepare_images import ROOT,sha256,write_json
+from prepare_images import ROOT,sha256,write_json,private_artwork
 from remote_images import ensure,destinations,remote_variant,immutable_upload,checksum64
 from signup import config as signup_config, public_settings, validate_public, build_environment
 import commerce_build
@@ -30,11 +30,12 @@ MUTABLE='public, max-age=0, s-maxage=60, must-revalidate'
 ROOT_FILES={'index.html','200.html','404.html','_payload.json','robots.txt','build.json','favicon.ico','favicon.svg','sitemap.xml'}
 TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8',
        '.json':'application/json','.txt':'text/plain; charset=utf-8','.xml':'application/xml','.svg':'image/svg+xml',
-       '.ico':'image/x-icon','.png':'image/png','.woff':'font/woff','.woff2':'font/woff2'}
+       '.ico':'image/x-icon','.png':'image/png','.webp':'image/webp','.woff':'font/woff','.woff2':'font/woff2'}
 
 def classify(key):
     parts=Path(key).parts
     if not parts or key.startswith('/') or '\\' in key or any(p.startswith('.') for p in parts):raise ValueError(f'Unsafe output path: {key}')
+    if private_artwork(key):raise ValueError(f'Private artwork in site output: {key}')
     if key not in ROOT_FILES and key not in commerce_build.POLICY_FILES and not key.startswith('_nuxt/'):
         raise ValueError(f'Unrecognized public file: {key}')
     suffix=Path(key).suffix

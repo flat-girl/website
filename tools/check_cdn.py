@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 from image_plan import plan,IMMUTABLE
+from deploy_site import file_manifest
 from prepare_images import ROOT,prepare,sha256,write_json
 
 def main():
@@ -34,6 +35,7 @@ def main():
             result=subprocess.run(command,cwd=root,env=env,capture_output=True,text=True)
             if result.returncode:raise RuntimeError(result.stdout[-3000:]+result.stderr[:4000]+result.stderr[-1000:])
         public=root/'web/.output/public'
+        file_manifest(public)
         if (root/'images/raw').exists() or (root/'images/processed').exists() or (public/'variants').exists():raise ValueError('CDN checkout contains local image copies')
         html=(public/'index.html').read_text()
         if 'https://fixture.cloudfront.net/variants/' not in html or 'noindex' not in html:raise ValueError('CDN origin/noindex missing from HTML')

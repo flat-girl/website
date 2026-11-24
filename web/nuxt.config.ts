@@ -1,6 +1,7 @@
 import { env } from 'node:process'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { policyLinks } from './app/content/storefront'
 
 const faviconVersion = createHash('sha256')
@@ -40,6 +41,15 @@ export default defineNuxtConfig({
     },
   },
   $development: {
+    hooks: {
+      'pages:extend'(pages) {
+        pages.push({
+          name: 'flat-girl-sticker',
+          path: '/flat-girl-sticker',
+          file: fileURLToPath(new URL('./app/dev/StickerPreview.vue', import.meta.url)),
+        })
+      },
+    },
     runtimeConfig: {
       public: {
         signupEndpoint: '/api/subscribe',

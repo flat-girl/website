@@ -1,11 +1,9 @@
 // Presentation copy lives here; Shopify supplies commerce facts through the API.
 export const storefront = {
   title: 'Boring Flat Girl Plush Blanket',
-  description: "Making plush blankets because we can't be the only ones who saw this commercial as kids 🤧",
   editionSize: 500,
   shipping: 'Free Shipping',
-  fulfillment: 'Fulfilment by Christmas',
-  fulfillmentNote: "We're reasonably confident we can get these to you by Christmas, barring acts of God and whatnot 🤷‍♂️",
+  fulfillment: 'Fulfilment shortly after Christmas',
 }
 
 const sharedSignup = {

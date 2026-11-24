@@ -1,5 +1,12 @@
 # Shopify integration proof
 
+For Drop 2 cart verification and the switch from temporary backorders to 500 available blankets, follow the [Stocking Stuffer Pack launch workflow](workflows/20261124_STOCKING_STUFFER_DROP.md).
+
+The [Meta sales dataset plan](plans/meta-sales-dataset-plan.md) moves website
+events to the dataset already used by Shopify and active ads, then verifies click
+attribution and checkout event ownership. Implementation and rollout are pending;
+follow its [migration workflow](workflows/20261118_META_SALES_DATASET_MIGRATION.md).
+
 For implementation order, contracts, and fresh-session prompts, use the
 [Shopify integration plan](plans/shopify-integration-plan.md). Sessions 1–2 implement the local UI and static deployment preparation.
 Sold-out signup reuses the existing endpoint: beta list 10, production list 9.

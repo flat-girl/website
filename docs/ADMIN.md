@@ -1,5 +1,10 @@
 # Admin dashboard
 
+**Planned:** recorded ViewContent counts by Meta, TikTok, Other and Direct / unknown.
+This is visit-source reporting, not signup attribution. See the
+[implementation plan](plans/meta-sales-dataset-plan.md#5-capture-view-sources-and-display-them-in-admin)
+and [pending rollout](workflows/20261118_VIEW_SOURCE_ATTRIBUTION.md).
+
 The deployed implementation serves a static Nuxt/Tailwind dashboard at
 `admin.flatgirl.net`, backed by an independent read-only metrics service and one
 writable cache table. No campaign end date, Brevo access, scheduler, or production

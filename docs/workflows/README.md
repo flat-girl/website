@@ -11,6 +11,9 @@ historical procedure, especially one containing cleanup commands.
 
 | Date | Workflow |
 | --- | --- |
+| 2026-11-24 | [Stocking Stuffer Pack and Drop 2 launch — shared image privacy update, S3 uploads and beta publication pending](20261124_STOCKING_STUFFER_DROP.md) |
+| 2026-11-18 | [View source attribution in admin — implementation and rollout pending](20261118_VIEW_SOURCE_ATTRIBUTION.md) |
+| 2026-11-18 | [Meta sales dataset migration — implementation and rollout pending](20261118_META_SALES_DATASET_MIGRATION.md) |
 | 2026-11-17 | [Shopify inventory shortcoming documented — custom check required; implementation pending](20261117_SHOPIFY_THEME_DATA_PROOF.md) |
 | 2026-11-16 | [Shopify checkout domain — setup reported; compatible publication pending](20261116_SHOPIFY_BRANDED_DOMAINS.md) |
 | 2026-11-16 | [Storefront SEO launch — prepared; publication pending](20261116_STOREFRONT_SEO_LAUNCH.md) |

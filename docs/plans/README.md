@@ -8,6 +8,7 @@ backend, signup, beta verification, domains, attribution, and launch sessions.
 
 | Plan | Scope |
 | --- | --- |
+| [Meta sales dataset](meta-sales-dataset-plan.md) | Move website events to the active ads' dataset; add admin view sources; verify Shopify attribution and preserve waitlist tracking |
 | [Milestone 1](milestone-1-plan.md) | Static site and image carousel |
 | [Milestone 2](milestone-2-plan.md) | AWS hosting and deployment |
 | [Milestone 3](milestone-3-plan.md) | Turnstile and Brevo signup |

@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { createShopifyCommerce, policyParagraphs } from '../../shared/utils/shopify'
+import { previewStockOverride, createShopifyCommerce, policyParagraphs } from '../../shared/utils/shopify'
 
 const variant = 'gid://shopify/ProductVariant/68124854681876'
+const pack = 'gid://shopify/ProductVariant/68279777100052'
+const cartLine = (id: string, quantity: number, amount: string) => ({
+  merchandise: { id }, quantity, cost: { totalAmount: { amount, currencyCode: 'USD' } },
+})
 const product = 'gid://shopify/Product/15491665297684'
 const productData = ({ price = { amount: '60.0', currencyCode: 'USD' }, ...extra }:
   { price?: { amount: string; currencyCode: string }; [key: string]: unknown } = {}) => ({ product: {
@@ -9,8 +13,8 @@ const productData = ({ price = { amount: '60.0', currencyCode: 'USD' }, ...extra
   priceRange: { minVariantPrice: price, maxVariantPrice: price }, ...extra,
 } })
 const cartData = (extra = {}) => ({ cartCreate: { userErrors: [], warnings: [], cart: {
-  checkoutUrl: 'https://flatgirl.myshopify.com/checkouts/example', totalQuantity: 2,
-  lines: { nodes: [{ quantity: 2, merchandise: { id: variant } }] },
+  checkoutUrl: 'https://flatgirl.myshopify.com/checkouts/example', totalQuantity: 4,
+  lines: { nodes: [cartLine(pack, 2, '0'), cartLine(variant, 2, '120')] },
   cost: { subtotalAmount: { amount: '120.0', currencyCode: 'USD' } }, ...extra,
 } } })
 const input = { quantity: 2, expectedUnitPrice: { amount: '60.00', currencyCode: 'USD' } }
@@ -48,6 +52,39 @@ test('product inventory and price load without any variant data', async () => {
   const result = (await adapter([data]).api.readProduct()).product
   expect(result.quantityAvailable).toBe(425)
   expect(result.price).toEqual({ amount: '60.00', currencyCode: 'USD' })
+})
+
+test('beta and local origins accept one nonnegative safe integer stock override', () => {
+  for (const [query, expected] of [['0', 0], ['2', 2], ['500', 500]] as const) {
+    expect(previewStockOverride(new URL('https://beta.flatgirl.net/?FORCE_STOCK=' + query))).toBe(expected)
+  }
+  for (const query of ['', '?FORCE_STOCK', '?FORCE_STOCK=-1', '?FORCE_STOCK=0.5', '?FORCE_STOCK=1e2',
+    '?FORCE_STOCK=1&FORCE_STOCK=2', '?FORCE_STOCK=9007199254740992']) {
+    expect(previewStockOverride(new URL('https://beta.flatgirl.net/' + query))).toBeUndefined()
+  }
+  for (const host of ['localhost', '127.0.0.1', '[::1]', '0.0.0.0']) {
+    expect(previewStockOverride(new URL('http://' + host + ':3000/?FORCE_STOCK=2'))).toBe(2)
+  }
+  for (const host of ['flatgirl.net', 'www.flatgirl.net', 'beta.flatgirl.net.example.org', 'localhost.example.org']) {
+    expect(previewStockOverride(new URL('https://' + host + '/?FORCE_STOCK=0'))).toBeUndefined()
+  }
+})
+
+test('beta stock controls product and pre-checkout limits while Shopify controls the cart', async () => {
+  const fetcher: typeof fetch = async (_url, options) => {
+    const { query } = JSON.parse(String(options?.body))
+    if (query.includes('cartCreate')) return Response.json({ data: cartData() })
+    expect(query).not.toContain('totalInventory')
+    expect(query).not.toContain('availableForSale')
+    return Response.json({ data: productData({ availableForSale: undefined, totalInventory: undefined }) })
+  }
+  const api = createShopifyCommerce('test-public-token', fetcher, 'public', 2)
+  expect((await api.readProduct()).product).toMatchObject({ availableForSale: true, quantityAvailable: 2 })
+  await expect(api.createCheckout({ ...input, quantity: 3 })).rejects.toMatchObject({ code: 'QUANTITY_UNAVAILABLE' })
+  await expect(api.createCheckout(input)).resolves.toHaveProperty('checkoutUrl')
+  const soldOut = createShopifyCommerce('test-public-token', fetcher, 'public', 0)
+  expect((await soldOut.readProduct()).product).toMatchObject({ availableForSale: false, quantityAvailable: 0 })
+  await expect(soldOut.createCheckout(input)).rejects.toMatchObject({ code: 'SOLD_OUT' })
 })
 
 test('unknown product inventory stays unknown and invalid inventory fails closed', async () => {
@@ -114,7 +151,7 @@ test('checkout validates authoritative quantity, variant, subtotal and returned 
   expect(await api.createCheckout(input)).toEqual({ checkoutUrl: 'https://flatgirl.myshopify.com/checkouts/example' })
   expect(calls).toHaveLength(2)
   expect(JSON.parse(String(calls[1]?.options.body)).variables.input).toEqual({
-    lines: [{ merchandiseId: variant, quantity: 2 }], buyerIdentity: { countryCode: 'US' },
+    lines: [{ merchandiseId: variant, quantity: 2 }, { merchandiseId: pack, quantity: 2 }], buyerIdentity: { countryCode: 'US' },
   })
 })
 
@@ -154,6 +191,9 @@ for (const [extra, code] of [
   [{ checkoutUrl: 'https://flatgirl.myshopify.com.evil.example/checkout' }, 'INVALID_CHECKOUT_URL'],
   [{ checkoutUrl: 'https://user:pass@flatgirl.myshopify.com/checkout' }, 'INVALID_CHECKOUT_URL'],
   [{ totalQuantity: 1 }, 'UNAVAILABLE'],
+  [{ lines: { nodes: [cartLine(variant, 2, '120')] } }, 'UNAVAILABLE'],
+  [{ lines: { nodes: [cartLine(variant, 2, '120'), cartLine(pack, 1, '0')] } }, 'UNAVAILABLE'],
+  [{ lines: { nodes: [cartLine(variant, 2, '120'), cartLine(pack, 2, '16')] } }, 'UNAVAILABLE'],
   [{ cost: { subtotalAmount: { amount: '60', currencyCode: 'USD' } } }, 'PRICE_CHANGED'],
 ] as const) {
   test(`cart validation rejects ${JSON.stringify(extra)}`, async () => {
