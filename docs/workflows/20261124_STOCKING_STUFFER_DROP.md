@@ -6,7 +6,7 @@ Beta and production use the same Shopify store, variants and automatic discount.
 
 ## 1. Prepare the release
 
-- Include the purchase panel, its imported SVG/WebP artwork, two-line cart validation, image tooling and shared image bucket policy in the reviewed release. The lower-left corner currently repeats Sarah as the couch placeholder. Beta can build a dirty tree. Repeat beta verification if the source changes before production.
+- Include the purchase panel, its imported SVG/WebP artwork, two-line cart validation, image tooling and shared image bucket policy in the reviewed release. The lower-left corner uses the glitter couch sticker. Beta can build a dirty tree. Repeat beta verification if the source changes before production.
 - Use the beta stock override to exercise the purchase panel and its pre-checkout quantity check. Shopify still supplies the product and price and enforces its actual inventory policy on the cart. Temporary backorders are needed only for the live checkout rehearsal at zero blanket stock.
 - Use the reviewed source revision for both builds. Production requires a clean committed tree. Have the shared image operator profile, beta Basic Auth credentials, the public Headless Storefront token, the environment-specific publisher profiles and Shopify inventory access ready.
 - Before the production launch, record the current production release ID from `https://flatgirl.net/build.json` and confirm its verified archive for rollback. Record current Shopify available quantities, fulfillment location and overselling setting. Check that enough complete packs can ship for the edition and that the automatic discount covers multiple blankets.
@@ -42,7 +42,7 @@ Six WebPs from earlier releases returned HTTP 200 without authentication on Nove
 
 ## 3. Upload the catalog images to S3
 
-The two new catalog sources are `images/raw/iou_front.png` and `images/raw/iou_back.png`. Each produces 480, 960 and 1860px WebPs on the shared image CDN. The purchase-panel illustrations have a separate delivery path: Nuxt bundles the optimized IOU SVGs, die-cut mask, small Sarah print and foil textures from `web/app/assets/stocking-stuffers/` into the site release. `site-publish` uploads those files to the destination's site bucket.
+The two new catalog sources are `images/raw/iou_front.png` and `images/raw/iou_back.png`. Each produces 480, 960 and 1860px WebPs on the shared image CDN. The purchase panel selects both coupon faces by catalog ID. Regenerating the print PNGs with `tools/generate_iou.py` refreshes the catalog. After the variants are uploaded, rebuild the site to pick up their new URLs. Nuxt bundles the sticker artwork separately in the site release.
 
 Run these commands from the repository root. Review the manifest diff and dry-run output. With all earlier images present, the expected additions are two private originals and six public IOU variants. Already uploaded objects count as hits. Stop if other unexpected sources appear. Keep `images/product-photos/`, the raw sticker PNG, `sarah_artwork*` and the print SVG masters out of the catalog and the site artifact.
 
@@ -76,7 +76,7 @@ export FLAT_GIRL_STOREFRONT_MODE=commerce
 make site-build PROFILE=flat-girl-beta SITE_ENV=beta
 ```
 
-After the build succeeds, publish it with the command below. The publisher selects the latest local beta build and prompts for beta Basic Auth to verify the deployment.
+The corrected coupon build is already staged locally. The command below publishes the latest local beta build. The publisher prompts for beta Basic Auth to verify the deployment.
 
 ```sh
 make site-publish PROFILE=flat-girl-beta SITE_ENV=beta
@@ -102,20 +102,19 @@ git rev-parse HEAD
 make site-build PROFILE=flat-girl-production SITE_ENV=production
 ```
 
-Enter the release ID from the successful **production** build. Confirm the dry run names that release and destination. Save the ID for launch.
+After the production build succeeds, preview publication and confirm the destination.
 
 ```sh
-read -r DROP_PROD_RELEASE
-make site-publish PROFILE=flat-girl-production SITE_ENV=production RELEASE="${DROP_PROD_RELEASE:?}" DRY_RUN=1
+make site-publish PROFILE=flat-girl-production SITE_ENV=production DRY_RUN=1
 ```
 
 ## 6. Launch November 24
 
 1. At the owner's go-ahead, open Shopify Admin on the blanket variant's inventory at the online fulfillment location. Confirm the automatic pack discount is active, overselling is off and available stock is still zero. Have the inventory editor ready.
-2. Publish the staged production artifact. Restore the recorded release variable if using a new terminal.
+2. Publish the staged production build.
 
    ```sh
-   make site-publish PROFILE=flat-girl-production SITE_ENV=production RELEASE="${DROP_PROD_RELEASE:?}"
+   make site-publish PROFILE=flat-girl-production SITE_ENV=production
    ```
 
 3. Wait for the publisher's CloudFront invalidation and live verification to succeed. Check [production build identity](https://flatgirl.net/build.json). Open [production with the beta parameter](https://flatgirl.net/?FORCE_STOCK=500) and confirm Drop 2 still shows sold out. As soon as these checks pass, **set blanket Available to 500** and save once. Leave overselling off. Record the release ID, save time and resulting Admin quantity. If publication fails, keep inventory closed.
@@ -125,7 +124,7 @@ make site-publish PROFILE=flat-girl-production SITE_ENV=production RELEASE="${DR
 
 Keep the CDN privacy policy in place during storefront rollback. Choose a verified release whose image receipt excludes the six retired variants. Older receipts that require them will fail HTTPS verification. If a current gallery or IOU image fails after the privacy change, check the denied key patterns and the image receipt before retrying.
 
-- **Before restocking:** if beta testing fails, disable temporary backorders and keep stock at zero while fixing the release. If publication fails, inspect the journal, correct the cause and retry the same release ID. Repeat the affected verification before opening sales.
+- **Before restocking:** if beta testing fails, disable temporary backorders and keep stock at zero while fixing the release. If publication fails, inspect the journal, correct the cause and retry publication while that build is still current locally. Repeat the affected verification before opening sales.
 - **After restocking:** if checkout omits or charges for the pack, record current inventory and close blanket sales in Shopify first. With tracking on and overselling off, set available stock to zero at the online sellable location(s). Verify closure with a fresh cart and an already-issued checkout. Review orders since opening for missing or charged packs.
 - **Restore the site if needed:** enter the destination's prior verified release ID. For beta, use `SITE_ENV=beta PROFILE=flat-girl-beta` in the commands below. For production:
 
@@ -144,7 +143,8 @@ Keep the CDN privacy policy in place during storefront rollback. Choose a verifi
 | Shopify-only cart proof, November 23 | Verified in the US market. Pack product `15528208531732`, variant `68279777100052`. One blanket (variant `68124854681876`) at zero stock with backorders enabled plus one pack produced $60 total with the full $16 pack discount. Cart only. |
 | Local verification, November 23 | CDN fixture passed typecheck, static generation and site file classification. All 60 Python tests, 35 commerce service tests and 63 infrastructure tests passed. CDK synthesized the updated images stack. Live beta verification pending. |
 | Two-line storefront checkout | Verified November 23 from the local Buy button with live Shopify. Quantities 1 and 2 returned matching free pack quantities and $60 and $120 merchandise subtotals. Both redirected to the Shopify checkout host. Verification stopped before payment. |
-| Purchase panel and release packaging | Implemented locally, including sold-out artwork and a WebP content type for Nuxt assets. Couch illustration uses the Sarah placeholder. Reviewed release revision pending. |
+| Purchase panel and release packaging | Implemented locally, including sold-out artwork and a WebP content type for Nuxt assets. The glitter couch sticker replaced the placeholder in the November 24 beta release. |
+| IOU design correction, November 24 | Verified beta release `20261124T183414Z-b5528e91f2ec` bundled older coupon SVGs. Corrected release `20261124T184219Z-28ba66a53969` uses the current catalog variants. Both faces decoded and matched the image receipt in local desktop Chrome and mobile-width WebKit checks with simulated stock. Owner publication and live verification pending. |
 | Public Sarah variants | November 23 live images-stack diff confirmed the artwork deny policy is deployed. Only the distribution tag differed. All six anonymous HEAD requests still returned 200. Operator permission, distribution tag, invalidation and confirmation of denial pending. The operator login worked. The administrator login for the access diff had expired. |
 | Catalog upload | Local catalog includes two new IOU PNGs. S3 dry run stopped at an expired AWS login. Source import, variant upload and remote verification pending. |
 | Beta release, quantity 1 and 2 checkouts, shipping, backorders disabled and sold-out verification | Pending |

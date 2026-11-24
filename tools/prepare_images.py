@@ -36,7 +36,8 @@ def source_info(path):
 def private_artwork(filename):
     path = Path(filename.lower().replace('_', '-'))
     return 'product-photos' in path.parts or path.name.startswith((
-        'sarah-artwork', 'sarah-front-no-outline', 'sarah-back-no-outline', 'flat-girl-holographic-sticker.',
+        'sarah-artwork', 'sarah-front-no-outline', 'sarah-back-no-outline',
+        'flat-girl-holographic-sticker.', 'couch-glitter-sticker.',
     ))
 
 

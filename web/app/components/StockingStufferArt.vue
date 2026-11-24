@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import ink from '~/assets/stocking-stuffers/flat-girl-print-small.webp'
-import front from '~/assets/stocking-stuffers/iou-front.svg'
-import back from '~/assets/stocking-stuffers/iou-back.svg'
 import { tiltTransform } from '~/utils/stockingStuffers'
+
+const images = useImages()
+const front = images.find(image => image.id === 'iou-front')
+const back = images.find(image => image.id === 'iou-back')
+if (!front || !back) throw new Error('The stocking stuffer artwork requires both IOU coupon images')
 
 // Resting angles in degrees. Positive turns clockwise, negative counterclockwise.
 const initialRotation = {
   iouFront: -12, // top left
   sarah: 16,     // top right
-  couch: -8,      // bottom left (Sarah placeholder)
+  couch: -8,     // bottom left
   iouBack: -5,   // bottom right
 }
 
@@ -84,11 +87,10 @@ onBeforeUnmount(() => stopTracking?.())
 
 <template>
   <div ref="frame" class="stuffer-art" aria-hidden="true">
-    <div class="corner front"><img :src="front" alt="" width="1860" height="792" :style="{ transform: tiltTransform(frontPose.x, frontPose.y, frontPose.rotation, tiltDegrees) }"></div>
+    <div class="corner front"><img :src="front.src" :srcset="front.srcset" sizes="(max-width: 30rem) 31vw, 9rem" alt="" :width="front.width" :height="front.height" :style="{ transform: tiltTransform(frontPose.x, frontPose.y, frontPose.rotation, tiltDegrees) }"></div>
     <div class="corner sarah"><FlatGirlSticker v-bind="sarahPose" :tilt-degrees="tiltDegrees" :ink="ink" /></div>
-    <!-- Use Sarah until the couch sticker artwork is ready. -->
-    <div class="corner couch"><FlatGirlSticker v-bind="couchPose" :tilt-degrees="tiltDegrees" :ink="ink" /></div>
-    <div class="corner back"><img :src="back" alt="" width="1860" height="792" :style="{ transform: tiltTransform(backPose.x, backPose.y, backPose.rotation, tiltDegrees) }"></div>
+    <div class="corner couch"><CouchSticker v-bind="couchPose" :tilt-degrees="tiltDegrees" /></div>
+    <div class="corner back"><img :src="back.src" :srcset="back.srcset" sizes="(max-width: 30rem) 31vw, 9rem" alt="" :width="back.width" :height="back.height" :style="{ transform: tiltTransform(backPose.x, backPose.y, backPose.rotation, tiltDegrees) }"></div>
   </div>
 </template>
 
@@ -115,7 +117,8 @@ onBeforeUnmount(() => stopTracking?.())
 .couch { place-self: end start; }
 .back { place-self: end; }
 .couch, .back { translate: 0 var(--bottom-art-offset); }
-.corner > svg { width: auto; height: 100%; aspect-ratio: 147.582 / 215.847; }
+.sarah > svg { width: auto; height: 100%; aspect-ratio: 147.582 / 215.847; }
+.couch > svg { width: 100%; height: auto; }
 .corner img { width: 100%; height: auto; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 20%)); }
 @media (max-width: 30rem) {
   .corner img { width: 112%; max-width: none; }

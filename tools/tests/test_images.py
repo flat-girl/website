@@ -89,7 +89,8 @@ class ImagesTest(unittest.TestCase):
                 Image.new('RGB', (12, 16)).save(raw / name)
             (raw / '.DS_Store').write_bytes(b'not an image')
             (raw / 'notes.txt').write_text('ignore')
-            for name in ['sarah_artwork_front_no.png', 'sarah_artwork_back.png', 'flat-girl-holographic-sticker.png']:
+            for name in ['sarah_artwork_front_no.png', 'sarah_artwork_back.png',
+                         'flat-girl-holographic-sticker.png', 'couch-glitter-sticker.png']:
                 Image.new('RGB', (12, 16)).save(raw / name)
                 with self.assertRaisesRegex(ValueError, 'Private artwork'):
                     image_transforms(dict(existing, file=name), {})

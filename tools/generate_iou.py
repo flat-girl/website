@@ -59,10 +59,10 @@ class Lettering:
 # All printed words live here. Add a Lettering entry to either side to add copy.
 # Use \n inside a string for a line break. Lines shrink to fit the given width.
 DENOMINATION = "1"
-ISSUER = "The Bank of Your Mother"
+ISSUER = "IN FLAT GIRL WE TRUST"
 SERIES = "SERIES 2026"
 SERIAL = "F 06742069 G"
-MONOGRAM = "FG"
+MONOGRAM = "420"
 VALUE_WORD = "ONE"
 FRONT_TEXT = (
     Lettering("FLAT GIRL RESERVE NOTE", 930, 66, 755, 34, BOLD, PAPER),

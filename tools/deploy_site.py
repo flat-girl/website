@@ -323,17 +323,21 @@ def restore_release(aws,env,release):
     return target
 
 def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument('command',choices=['build','publish','verify','rollback'])
-    parser.add_argument('--env',required=True,choices=['beta','production']);parser.add_argument('--profile',required=True)
-    parser.add_argument('--release');parser.add_argument('--dry-run',action='store_true')
-    args=parser.parse_args()
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest='command', required=True)
+    for name in ('build', 'publish', 'verify', 'rollback'):
+        command = commands.add_parser(name)
+        command.add_argument('--env', required=True, choices=['beta', 'production'])
+        command.add_argument('--profile', required=True)
+        command.add_argument('--dry-run', action='store_true')
+        if name in ('verify', 'rollback'):
+            command.add_argument('--release', required=name == 'rollback')
+    args = parser.parse_args()
     aws=AWS(args.profile,project(),read_only=args.command in ('build','verify') or args.dry_run)
     if args.command=='build':
         with lock('build'):return build(aws,args.env)
-    if args.command=='rollback' and not args.release:parser.error('--release is required for rollback')
-    directory=restore_release(aws,args.env,args.release) if args.command=='rollback' else release_dir(args.env,args.release)
-    if args.command=='verify':return verify(aws,args.env,directory)
+    if args.command=='verify':return verify(aws,args.env,release_dir(args.env,args.release))
+    directory = restore_release(aws,args.env,args.release) if args.command=='rollback' else release_dir(args.env)
     publish(aws,args.env,directory,args.dry_run)
 
 if __name__=='__main__':

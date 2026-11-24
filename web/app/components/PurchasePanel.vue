@@ -27,7 +27,7 @@ const emit = defineEmits<{ buy: [] }>()
       </p>
       <ul>
         <li>1x Holographic Flat Girl Sticker</li>
-        <li>1x Holographic Couch Sticker </li>
+        <li>1x Glitter Couch Sticker </li>
         <li>1x Flat Girl IOU Coupon</li>
       </ul>
       <p>

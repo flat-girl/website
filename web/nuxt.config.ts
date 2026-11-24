@@ -48,6 +48,11 @@ export default defineNuxtConfig({
           path: '/flat-girl-sticker',
           file: fileURLToPath(new URL('./app/dev/StickerPreview.vue', import.meta.url)),
         })
+        pages.push({
+          name: 'couch-sticker',
+          path: '/couch-sticker',
+          file: fileURLToPath(new URL('./app/dev/CouchStickerPreview.vue', import.meta.url)),
+        })
       },
     },
     runtimeConfig: {

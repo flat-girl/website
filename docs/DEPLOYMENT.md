@@ -19,8 +19,8 @@ The [November 24 Stocking Stuffer Pack workflow](workflows/20261124_STOCKING_STU
 | --- | --- | --- |
 | Infrastructure diff/deploy | Authenticated `flat-girl` operator profile, `cloud/aws/project.json`, reviewed stack/config changes | Shopify token or beta website password |
 | Commerce `site-build` | Matching publisher profile, explicit commerce mode, **public Headless Storefront token**, existing image variants, matching enabled signup stack | Private Storefront/Admin token, Brevo or Turnstile secret in the shell |
-| `site-publish` / dry run | Matching publisher profile, a built release for that environment, existing archived image objects | Fresh Shopify token or build environment variables; it does not rebuild |
-| `site-verify` / successful publication | Matching publisher profile and release; beta additionally prompts for website username/password | Shopify login, payment credentials or provider keys |
+| `site-publish` / dry run | Matching publisher profile, the latest successful local build for the environment, existing archived image objects | Fresh Shopify token or build environment variables; it does not rebuild |
+| `site-verify` / successful publication | Matching publisher profile. Beta also prompts for website username/password | Shopify login, payment credentials or provider keys |
 | Signup preflight / secret maintenance | `flat-girl` operator; existing shared SSM keys, or hidden prompts when setting keys | Shopify token; publisher roles cannot read signup secrets |
 
 `site-publish` runs verification after uploading, so a real beta publication
@@ -124,19 +124,17 @@ export FLAT_GIRL_STOREFRONT_MODE=commerce
 make site-build SITE_ENV=beta PROFILE=flat-girl-beta
 ```
 
-Stop if the build fails; do not publish the previous artifact by accident. On
-success, copy the release ID from `Built beta ...`. In the next block, paste that
-ID when `read` waits. The dry run previews publication; it does not deploy.
+After a successful build, preview publication. Both the dry run and publication use
+the latest successful local build for the selected environment.
 
 ```sh
-read -r FLAT_GIRL_BETA_RELEASE
-make site-publish SITE_ENV=beta PROFILE=flat-girl-beta RELEASE="${FLAT_GIRL_BETA_RELEASE:?Set the beta release ID first}" DRY_RUN=1
+make site-publish SITE_ENV=beta PROFILE=flat-girl-beta DRY_RUN=1
 ```
 
 Confirm the dry run names the intended release. Publish those exact bytes:
 
 ```sh
-make site-publish SITE_ENV=beta PROFILE=flat-girl-beta RELEASE="${FLAT_GIRL_BETA_RELEASE:?Set the beta release ID first}"
+make site-publish SITE_ENV=beta PROFILE=flat-girl-beta
 unset FLAT_GIRL_STOREFRONT_MODE NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN
 ```
 
@@ -148,14 +146,13 @@ for credentials privately and never forwards them to the image CDN.
 Read-only verification can be rerun independently:
 
 ```sh
-make site-verify SITE_ENV=beta PROFILE=flat-girl-beta RELEASE="${FLAT_GIRL_BETA_RELEASE:?Set the beta release ID first}"
+make site-verify SITE_ENV=beta PROFILE=flat-girl-beta
 ```
 
-If resuming in a new terminal, set `FLAT_GIRL_BETA_RELEASE` to the same recorded
-ID first. Without `RELEASE`, publish/verify use `.deploy/beta/current.json`, which
-selects the **latest local build**, not necessarily the currently deployed site.
-The release-variable guard stops these examples if the ID is unset or empty.
-No token is needed to resume publication or verification of that release.
+Each successful build updates `.deploy/<environment>/current.json`. The publisher
+reads this file each time it runs. A later build for that environment becomes the
+next publish target. To verify a specific historical build, `site-verify` accepts
+an optional `RELEASE`.
 
 Verify carousel navigation, full-size links, and no-JavaScript content in a real
 browser as well. The CLI verifies bytes/HTTP behavior; it does not automate a live
@@ -232,26 +229,24 @@ export FLAT_GIRL_STOREFRONT_MODE=commerce
 make site-build SITE_ENV=production PROFILE=flat-girl-production
 ```
 
-Only after a successful build, paste its `Built production ...` release ID:
+After a successful build, preview publication of the latest local production build.
 
 ```sh
-read -r FLAT_GIRL_PRODUCTION_RELEASE
-make site-publish SITE_ENV=production PROFILE=flat-girl-production RELEASE="${FLAT_GIRL_PRODUCTION_RELEASE:?Set the production release ID first}" DRY_RUN=1
+make site-publish SITE_ENV=production PROFILE=flat-girl-production DRY_RUN=1
 ```
 
 After reviewing the dry run:
 
 ```sh
-make site-publish SITE_ENV=production PROFILE=flat-girl-production RELEASE="${FLAT_GIRL_PRODUCTION_RELEASE:?Set the production release ID first}"
+make site-publish SITE_ENV=production PROFILE=flat-girl-production
 unset FLAT_GIRL_STOREFRONT_MODE NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN
 ```
 
 Production publication verifies automatically and has no beta Basic Auth prompt.
-For a later read-only verification, restore the release variable in a new terminal
-and run:
+To repeat the check for the latest local production build, run the following command.
 
 ```sh
-make site-verify SITE_ENV=production PROFILE=flat-girl-production RELEASE="${FLAT_GIRL_PRODUCTION_RELEASE:?Set the production release ID first}"
+make site-verify SITE_ENV=production PROFILE=flat-girl-production
 ```
 
 Verify `https://flatgirl.net`, www/HTTP redirects, images, and the intended indexing
@@ -264,21 +259,20 @@ does not authenticate Shopify or test provider delivery.
 ## Failure recovery
 
 No new Shopify token or build is required to retry or restore an existing release.
-Use the destination's publisher profile and an explicit release ID. A rollback
-requires the archive's verified publication record; a failed or merely built
+Use the destination's publisher profile. A rollback requires the archived
+release ID and its verified publication record; a failed or merely built
 release is not a verified recovery point. See [Access](ACCESS.md) if AWS login
 expires. A beta rollback prompts for website credentials during verification.
 
 If publication uploaded files but verification failed, fix the reported issue and
-rerun `site-publish` with the **same** `RELEASE` to complete verification and the
-remote verified record. A standalone `site-verify` writes local proof but does not
+rerun `site-publish` while the failed build is still the latest local build for
+that environment. This completes verification and the remote verified record. A standalone `site-verify` writes local proof but does not
 finish uploading that publication record. Changing the token in your terminal
 cannot repair a bad token already baked into an artifact; that requires a new build.
 
 Local journals live beside each artifact in `.deploy/releases/<env>/<id>/`.
-Uploads do not delete old objects. Retry a failed publication with the same
-`RELEASE=release-id`; if mutable files already changed, restore the previous verified
-release with `make site-rollback`. A local lock prevents concurrent publishers through
+Uploads preserve old objects. If mutable files already changed and recovery requires
+the previous verified release, restore it with `make site-rollback`. A local lock prevents concurrent publishers through
 verification; use only one publishing machine until CI serialization is added.
 
 S3 publication is ordered, not atomic. The current Nuxt payload contains no app

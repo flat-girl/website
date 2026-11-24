@@ -72,10 +72,9 @@ has the intended welcome automation. Existing contacts and suppression stay inta
 
 
 The rollback commands above deliberately restore the waitlist for the rehearsal.
-Record the new commerce release ID before doing so. If beta should end in commerce
-mode after the rehearsal, publish that same checked release with
-`make site-publish SITE_ENV=beta PROFILE=flat-girl-beta RELEASE=commerce-release-id`.
-Do not rebuild merely to switch between the two checked artifacts.
+Rollback leaves the latest local beta build in place. If beta should end in commerce
+mode and the commerce build is still current locally, run
+`make site-publish SITE_ENV=beta PROFILE=flat-girl-beta`.
 
 ## Verify and record results
 
