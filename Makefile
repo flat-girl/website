@@ -15,7 +15,7 @@ bootstrap = $(if $(filter 1,$(BOOTSTRAP)),--bootstrap,$(if $(filter 0,$(BOOTSTRA
 release = $(if $(strip $(RELEASE)),--release $(call quote,$(RELEASE)))
 no_dry_run = $(if $(filter 0,$(DRY_RUN)),,$(error This target does not support DRY_RUN; use cloud-diff for infrastructure previews))
 
-.PHONY: help cloud-preflight cloud-diff cloud-deploy beta-auth beta-auth-migrate beta-enabled \
+.PHONY: help server server-down cloud-preflight cloud-diff cloud-deploy beta-auth beta-auth-migrate beta-enabled \
         sources-import sources-pull image-crop images-prepare images-ensure images-check \
         site-build site-publish site-verify site-rollback signup-secrets signup-preflight signup-status signup-enabled
 
@@ -23,6 +23,8 @@ help:
 	@printf '%s\n' \
 	  'Run from the repository root. AWS targets require PROFILE explicitly.' \
 	  '' \
+	  '  make server       (run the local Nuxt dev server in this terminal)' \
+	  '  make server-down  (stop this checkout’s Nuxt dev server)' \
 	  '  make cloud-preflight PROFILE=default' \
 	  '  make cloud-diff PROFILE=default STACK=access' \
 	  '  make cloud-deploy PROFILE=default STACK=access BOOTSTRAP=1' \
@@ -44,15 +46,38 @@ help:
 	  '  make signup-status PROFILE=flat-girl SITE_ENV=beta' \
 	  '  make signup-enabled PROFILE=flat-girl SITE_ENV=beta ENABLED=false DRY_RUN=1' \
 	  '  make signup-notifications PROFILE=flat-girl SITE_ENV=production ACTION=status|seed|enable|test|disable' \
+	  '  make shopify-check  (read product only; private token prompt)' \
+	  '  make shopify-test  (create one-unit cart and open checkout; private token prompt)' \
 	  '' \
 	  'DRY_RUN=1 previews supported operations; omit it to perform them.' \
-	  'site-publish and site-verify optionally accept RELEASE; rollback requires it.' \
+	  'site-publish uses the latest local build for SITE_ENV.' \
+	  'site-verify optionally accepts RELEASE; site-rollback requires it.' \
 	  'Meta: make meta-secrets/meta-config/meta-status/meta-test; see docs/META.md.' \
 	  'Admin: make admin-build/admin-auth/admin-preflight/admin-publish/admin-verify/admin-rollback; see docs/ADMIN.md.' \
 	  'See docs/ACCESS.md and docs/DEPLOYMENT.md for rollout order.'
 
+# npm invokes Nuxt through this checkout's bin path, including when started manually.
+dev_server_pids = ps -Ao pid=,command= | awk -v cli=$(call quote,$(CURDIR)/web/node_modules/.bin/nuxt) \
+  '{ pid = $$1; if (sub(/^[[:space:]]*[0-9]+[[:space:]]+([^[:space:]]*\/)?node[[:space:]]+/, "") && index($$0 " ", cli " dev ") == 1) print pid }'
+
+server:
+	@if [ -n "$$($(dev_server_pids))" ]; then echo 'Dev server is already running.'; \
+	else cd web && exec npm run dev -- --host 127.0.0.1; fi
+
+server-down:
+	@pids="$$($(dev_server_pids))"; \
+	if [ -n "$$pids" ]; then kill -TERM $$pids; \
+	else echo 'Dev server is already stopped.'; fi
+
 cloud-preflight:
 	$(PYTHON) tools/cloud.py preflight $(profile) --read-only
+
+.PHONY: shopify-check shopify-test
+shopify-check:
+	$(PYTHON) tools/shopify.py --read-only
+
+shopify-test:
+	$(no_dry_run)$(PYTHON) tools/shopify.py $(if $(strip $(VARIANT)),--variant $(call quote,$(VARIANT)))
 
 cloud-diff:
 	$(PYTHON) tools/cloud.py diff $(profile) --stack $(call required,STACK)
@@ -91,7 +116,8 @@ site-build:
 	$(PYTHON) tools/deploy_site.py build $(profile) $(site_env)
 
 site-publish:
-	$(PYTHON) tools/deploy_site.py publish $(profile) $(site_env) $(release) $(dry_run)
+	$(if $(filter command line,$(origin RELEASE)),$(error Unexpected make variable RELEASE for $@))
+	$(PYTHON) tools/deploy_site.py publish $(profile) $(site_env) $(dry_run)
 
 site-verify:
 	$(PYTHON) tools/deploy_site.py verify $(profile) $(site_env) $(release)

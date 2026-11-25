@@ -52,6 +52,8 @@ export class Access extends Base {
     operator.addToPolicy(statement(['route53:GetHostedZone','route53:ListResourceRecordSets'],[`arn:aws:route53:::hostedzone/${p.hostedZoneId}`]))
     operator.addToPolicy(statement(['route53:ListHostedZonesByName','cloudfront:ListDistributions','acm:ListCertificates'],['*']))
     operator.addToPolicy(statement(['cloudfront:GetDistribution','cloudfront:GetDistributionConfig'],[`arn:aws:cloudfront::${p.account}:distribution/*`]))
+    operator.addToPolicy(statement(['cloudfront:CreateInvalidation','cloudfront:GetInvalidation'],[`arn:aws:cloudfront::${p.account}:distribution/*`],{
+      StringEquals:{'aws:ResourceTag/Project':'FlatGirl','aws:ResourceTag/Environment':'images'}}))
     for(const env of ['beta','production']) {
       const role=new iam.Role(this,`${env}Publisher`,{roleName:`flat-girl-${env}-publisher`,assumedBy:new iam.CompositePrincipal(trust,new iam.ArnPrincipal(operator.roleArn))})
       const site=`arn:aws:s3:::${bucketName(p,env)}`, sources=buckets[0],variants=buckets[1]

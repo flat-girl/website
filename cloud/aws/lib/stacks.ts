@@ -41,12 +41,19 @@ export class Images extends Base {
   constructor(scope: Construct, p: Config) {
     super(scope,stacks.images,p)
     const sources=this.bucket('sources'), variants=this.bucket('variants')
+    // Earlier releases published six WebPs of the full Sarah artwork under these IDs.
+    variants.addToResourcePolicy(new iam.PolicyStatement({
+      sid: 'KeepSarahArtworkOffCdn', effect: iam.Effect.DENY,
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')], actions: ['s3:GetObject'],
+      resources: ['sarah-front', 'sarah-back'].map(id => variants.arnForObjects(`variants/*/${id}-*.webp`)),
+    }))
     variants.addToResourcePolicy(new iam.PolicyStatement({effect:iam.Effect.DENY,principals:[new iam.AnyPrincipal()],
       actions:['s3:PutObject'],resources:[variants.arnForObjects('variants/*')],conditions:{StringNotEquals:{'s3:if-none-match':'*'}}}))
     const distribution=new cf.Distribution(this,'Distribution',{comment:'Flat Girl shared processed images',
       defaultBehavior:{origin:S3BucketOrigin.withOriginAccessControl(variants),viewerProtocolPolicy:cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods:cf.AllowedMethods.ALLOW_GET_HEAD,cachePolicy:cf.CachePolicy.CACHING_OPTIMIZED},
       errorResponses:[403,404].map(httpStatus=>({httpStatus,ttl:Duration.seconds(0)}))})
+    Tags.of(distribution).add('Environment','images')
     this.output('SourceBucketName',sources.bucketName); this.output('VariantsBucketName',variants.bucketName)
     this.output('ImageBaseUrl',`https://${distribution.distributionDomainName}`); this.output('DistributionId',distribution.distributionId)
   }

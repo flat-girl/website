@@ -398,3 +398,12 @@ Receipts: `.deploy/admin/incremental-indexes.json` and
 updated for schema 3; all seven admin tooling tests pass. Initial live cache reads
 still showed schema 2 pending the next authenticated refresh; authenticated
 incremental refresh is not claimed by these deployment checks.
+
+## Planned view source reporting
+
+November 18, 2026: the owner requested Meta versus TikTok **ViewContent** counts
+to show where visits come from, explicitly clarifying that signup attribution is
+not required. Stage 5 of the [Meta sales dataset plan](meta-sales-dataset-plan.md#5-capture-view-sources-and-display-them-in-admin)
+defines current-request source rules, storage, admin aggregates and UI. The
+[view source rollout](../workflows/20261118_VIEW_SOURCE_ATTRIBUTION.md) is pending.
+The preceding implementation history remains unchanged.

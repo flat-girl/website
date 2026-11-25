@@ -13,8 +13,8 @@ from aws_common import AWS
 
 def fixture():
     return dict(turnstileSiteKey='0xTestSiteKeyForOfflineTests',
-                beta=dict(enabled=True,listId=5,rateLimit=1,burstLimit=2),
-                production=dict(enabled=True,listId=4,rateLimit=3,burstLimit=5))
+                beta=dict(enabled=True,listId=10,rateLimit=1,burstLimit=2),
+                production=dict(enabled=True,listId=9,rateLimit=3,burstLimit=5))
 
 class SignupTests(unittest.TestCase):
     def test_config_and_artifact_environment_validation(self):
@@ -91,7 +91,7 @@ class SignupTests(unittest.TestCase):
         out=io.StringIO();aws=Fake()
         with patch.object(signup,'get_list') as get_list,contextlib.redirect_stdout(out):
             signup.preflight(aws,'beta',fixture())
-            get_list.assert_called_once_with('private-key',5)
+            get_list.assert_called_once_with('private-key',10)
         self.assertEqual(aws.last,('ssm','get-parameter'));self.assertNotIn('private-key',out.getvalue())
 
 if __name__=='__main__':unittest.main()

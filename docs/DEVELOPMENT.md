@@ -5,7 +5,7 @@ a zoomable full-size photo viewer, and a working launch-notification form. Miles
 are complete for their core scope; beta and production are deployed.
 Production: <https://flatgirl.net>.
 Final landing-page content and branding come later.
-Signup is enabled with beta list **5**, production list **4**, shared provider
+Signup is enabled with beta list **10**, production list **9** (local configuration; rollout pending), shared provider
 keys, and a Brevo-managed welcome email. See the [signup runbook](SIGNUP.md)
 and [milestone 3 completion handoff](plans/milestone-3-plan.md#completion-handoff--november-5-2026).
 Meta CAPI is deployed with SQS delivery, durable DynamoDB event records, and a
@@ -33,10 +33,11 @@ npm run dev --prefix web
 ```
 
 Open the localhost URL printed by Nuxt. Both dev and generate prepare images
-automatically. The notification form is always shown. In `npm run dev`, it
-posts to a local mock at `/api/subscribe`. The form uses the same markup,
+automatically. Development opens the purchase page; it uses mocks unless the shared Shopify source switch below is enabled. Open `/?commerce=waitlist` for
+the launch form or `/?commerce=sold-out` for the sold-out form; both post to a
+local mock at `/api/subscribe`. The form uses the same markup,
 privacy text, and verification flow in every environment. Nuxt's development
-configuration supplies Cloudflare's [public Turnstile test key](https://developers.cloudflare.com/turnstile/troubleshooting/testing/);
+configuration forces local endpoints and supplies Cloudflare's [public Turnstile test key](https://developers.cloudflare.com/turnstile/troubleshooting/testing/);
 no signup is stored and no email is sent. No private API keys or signup environment
 variables are needed. Turnstile requires a network connection; browser tests stub
 its script for offline checks. Generated builds use the configured live API.
@@ -44,6 +45,8 @@ Check the local flow with
 `npm run test:signup:dev --prefix web`.
 
 ### Local signup error scenarios
+
+Open `/?commerce=waitlist` first.
 
 Enter these in the email field while running `npm run dev`. The mock backend
 returns the corresponding response; the frontend uses its normal error handling.
@@ -192,3 +195,164 @@ Run `make help` for local AWS commands. Targets call the Python tools through uv
 make images-check PROFILE=flat-girl
 make site-publish PROFILE=flat-girl-beta SITE_ENV=beta DRY_RUN=1
 ```
+
+
+## Local commerce preview
+
+```sh
+npm run dev --prefix web
+```
+
+Open `http://localhost:3000/`. With `FLAT_GIRL_COMMERCE_SOURCE=local` (the default), no Shopify token is needed.
+Checkout opens a clearly labeled local mock page; no cart, order, payment or email
+is created. The `shopify` setting below reads real store data and creates a real
+Shopify cart only when Buy now is clicked.
+Photo assets are local; Turnstile uses its public test key and still needs
+connectivity in manual previews. Browser tests replace its script offline.
+
+Edit copy in `web/app/content/storefront.ts`. Add an optional `notes` array to
+any policy entry there: each note is an author-written HTML string beneath
+the page title, above the fetched policy. Use `<strong>`, `<em>`, links, paragraphs
+or lists. Notes are trusted repository content, not API/user input, and share the
+policy's rich-text styling. Notes stay editable locally when
+Shopify updates its policy content. The parent supplies every
+launch/sold-out-specific input to `SignupForm`, including optional request
+metadata. The form itself has no purpose/mode prop. Price and stock come from
+commerce responses. Current UI has no installments or subtotal; Free Shipping!
+is a separate line below the price. The Christmas asterisk is plain text.
+
+Choose a scenario with `/?commerce=NAME`; switches apply only in development
+with the `local` source. Shopify mode ignores them:
+
+| Scenarios | Behavior |
+| --- | --- |
+| `available` (default), `low-stock`, `unknown-stock` | 327 available, 2 available, or no exact inventory count |
+| `waitlist`, `closed`, `sold-out` | Launch form, sales-closed launch form, sold-out form |
+| `slow`, `timeout`, `error`, `malformed` | Delayed loading, read timeout, service failure, malformed product |
+| `checkout-slow`, `checkout-timeout`, `checkout-error`, `rate-limited`, `unsafe-checkout` | Pending/timeout/retry behavior; unsafe URL cannot leave localhost |
+| `price-changed`, `quantity-changed`, `stock-changed`, `sales-closed` | Checkout conflict refreshes price to $64, stock to 2, sold out, or closed sales |
+
+For `quantity-changed`, select more than two before buying. Fixtures are
+stateless: conflict refreshes include a dev-only `updated=1` query; reload resets
+the scenario. Persistent errors keep failing until you select another scenario;
+browser tests intercept the next request to verify successful manual retry.
+No scenario selector is added to the product page.
+
+Preview a specific stock level at [localhost with two blankets](http://localhost:3000/?FORCE_STOCK=2).
+Use `0` for sold out or remove the parameter to restore the selected commerce source.
+Local fixtures use the same count at mock checkout. In Shopify mode the store still enforces its inventory policy.
+
+Footer policy pages fetch `/api/commerce/policies/:handle`. Local source returns
+editable drafts that are absent from generated client bundles. Shopify source
+queries the store’s `shop` GraphQL fields on every request, without a content cache. Contact information and
+final privacy/terms content must be supplied before launch.
+
+```sh
+npm run typecheck --prefix web
+npm run test:commerce:dev --prefix web
+npm run test:signup:dev --prefix web
+npm run generate --prefix web
+```
+
+If the sandbox cannot write the normal uv cache, prefix these commands with
+`UV_CACHE_DIR=/private/tmp/flatgirl-uv-cache`. Tests require a local Chrome install.
+Dev tests can reuse an existing local Nuxt server; they do not stop it. Their
+preflight refuses Shopify source before any checkout test runs. Set the source
+to local and restart before running them. `npm run test:commerce:service --prefix web`
+tests the Shopify adapter with injected responses, without a server or token.
+
+Generated builds default to waitlist mode and ignore scenario query parameters.
+An explicit commerce build needs `FLAT_GIRL_STOREFRONT_MODE=commerce` and
+`NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN`. Leave `FLAT_GIRL_COMMERCE_ENDPOINT`
+unset: static hosting calls Shopify directly. Published sold-out states use the same signup request and endpoint as the
+launch form (beta list 10, production list 9 after the signup-stack rollout). Policies fetch after mounting;
+without JavaScript, their page shell explains the requirement. Generation
+prerenders all five policy routes. The publisher accepts only their HTML/payload
+paths; the edge router serves their index documents after beta authentication.
+The routing change must be deployed with the beta stack before publication. No backend routes are deployed by Nuxt generation.
+
+For static browser validation while dev uses port 3000, run the following
+**test-only builds**, whose network responses are intercepted by Playwright:
+
+```sh
+FLAT_GIRL_SIGNUP_ENDPOINT=https://signup.invalid/subscribe FLAT_GIRL_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run generate --prefix web -- --dotenv /dev/null
+FLAT_GIRL_TEST_PORT=3001 FLAT_GIRL_TEST_SIGNUP=true npm run test:e2e --prefix web
+
+FLAT_GIRL_STOREFRONT_MODE=commerce NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN=test-public-token FLAT_GIRL_SIGNUP_ENDPOINT=https://signup.invalid/subscribe FLAT_GIRL_TURNSTILE_SITE_KEY=1x00000000000000000000AA npm run generate --prefix web -- --dotenv /dev/null
+FLAT_GIRL_TEST_PORT=3001 FLAT_GIRL_TEST_COMMERCE=true npm run test:e2e --prefix web -- commerce.spec.ts
+```
+
+Do not publish these test artifacts. Run ordinary `npm run generate --prefix web`
+afterward to restore the default waitlist output. The normal deployment pipeline
+continues to supply the environment's real signup settings.
+
+
+### Load from Shopify or local
+
+One setting controls **product, policy and checkout** data during development.
+Copy `web/.env.example` to `web/.env` if it does not exist, and set:
+
+```dotenv
+FLAT_GIRL_COMMERCE_SOURCE=shopify
+NUXT_SHOPIFY_STOREFRONT_TOKEN=your-private-headless-storefront-token
+```
+
+Use `FLAT_GIRL_COMMERCE_SOURCE=local` for the original local fixtures. Restart
+`npm run dev --prefix web` after changing the source. Nuxt also watches `.env`
+changes in an existing development session. `.env` is gitignored; the private token is
+server-only and is never included in public runtime configuration. Use the
+**private Storefront API token** from the Headless channel, not the storefront
+password or an Admin API token. Do not overwrite an existing `.env` to switch modes.
+
+To try direct browser access **without the private token**, add this to `web/.env`:
+
+```dotenv
+FLAT_GIRL_COMMERCE_SOURCE=shopify
+NUXT_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN=your-public-headless-storefront-token
+```
+
+Restart the dev server. A nonempty public token takes precedence for products,
+policies and checkout, sending requests directly from the browser to Shopify.
+There is no fallback to the private token if public access fails; you can remove
+or blank `NUXT_SHOPIFY_STOREFRONT_TOKEN` for this test. Clear the public token to
+return to private/server access. The public token is intentionally visible in
+browser configuration: never put a private or Admin token in this variable.
+The shared HTML sanitizer preserves policy rich text in both modes.
+In browser Network tools, verify requests to the store's `/api/2026-10/graphql.json`
+with `X-Shopify-Storefront-Access-Token`, rather than `/api/commerce`.
+The owner reports public-token access working locally. Generated beta checkout
+remains a Session 4 check; this switch does not change Shopify payment settings.
+The five-item cap is a UI convenience, not a hard purchase restriction (owner
+decision November 16). Inventory and sales closure still need Shopify enforcement.
+
+Shopify source:
+
+- Reads the configured variant from `tepwtx-zw.myshopify.com`, API `2026-10`,
+  including price and online sellable inventory. Normalizes `60.0` to `60.00`.
+- Reads current Shopify policy bodies into supported rich-text elements: headings,
+  bold/italic text, lists, line breaks, tables and clickable links. Vue renders a
+  validated element tree, never raw HTML; scripts, event handlers and unsafe URLs
+  are removed. Plain paragraphs remain in the response for older clients. Empty policies produce a 404
+  and an unpublished message; there is no silent fallback to local policy text.
+- Buy now validates quantity (1–5), current price and stock, creates a cart for
+  the fixed variant, checks cart lines, subtotal, warnings and checkout host,
+  then opens Shopify checkout. No automatic retry and no payment submission.
+- Does not change Shopify payment test mode or storefront publication settings.
+  Verify payment test mode in Shopify before manually completing a checkout.
+- Leaves signup on its local Brevo mock. This switch selects Shopify commerce;
+  it does not connect the separate signup provider.
+
+The storefront password is for visitors to Shopify-hosted pages. It is not API
+authentication. A tokenless query to this store returned “Online Store channel
+is locked”; the private Headless token successfully read policies and inventory
+while the store stayed private. There is no need to embed a storefront password
+in our frontend. If testing hosted checkout requires storefront login, use the
+Shopify password form in that browser; the redirect theme must preserve a usable
+password page (see `docs/SHOPIFY.md`).
+
+With a public token, the shared adapter runs directly in the browser, including
+static AWS builds. Without it, private-token requests use the local Nuxt server
+only. A normal generated build stays in waitlist mode and does not connect to
+Shopify during generation. `make site-build` ignores `web/.env`, checks public
+settings, removes private-token/unchecked public overrides, and records commerce
+settings in the release manifest. See [beta migration workflow](workflows/20261116_BETA_SHOPIFY_COMMERCE_MIGRATION.md).

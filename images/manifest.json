@@ -117,6 +117,24 @@
       "bytes": 1787557,
       "width": 1080,
       "height": 1440
+    },
+    {
+      "id": "iou-front",
+      "file": "iou_front.png",
+      "alt": "Front of the One Flat Dollar IOU, good for one Boring Flat Girl plush blanket.",
+      "sha256": "7a0fcc4a996b213945579264c242f4410a649592771f8f6d5bef9238bd71f4a0",
+      "bytes": 641092,
+      "width": 1860,
+      "height": 792
+    },
+    {
+      "id": "iou-back",
+      "file": "iou_back.png",
+      "alt": "Back of the One Flat Dollar IOU with Flat Girl\u2019s reverse portrait and a cannabis leaf seal.",
+      "sha256": "7eaae8c67eb086d555ba920c951c6994bb3e68b7e0bc5162e5b3fb30f59f8566",
+      "bytes": 801365,
+      "width": 1860,
+      "height": 792
     }
   ]
 }

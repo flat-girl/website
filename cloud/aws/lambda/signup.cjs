@@ -36,7 +36,7 @@ function createHandler(settings, dependencies) {
       dependencies.log({ outcome, durationMs: Date.now() - start })
       return response(status)
     }
-    if (!settings.enabled || ![5, 4].includes(settings.listId)) return finish(503, 'disabled')
+    if (!settings.enabled || ![10, 9].includes(settings.listId)) return finish(503, 'disabled')
     if (event.requestContext?.http?.method !== 'POST') return finish(405, 'validation_rejected')
     const headers = Object.fromEntries(Object.entries(event.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
     if (headers.origin !== settings.origin) return finish(403, 'validation_rejected')

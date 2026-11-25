@@ -11,7 +11,7 @@
     "test:images": "uv run --locked --project ../tools python -m unittest discover -s ../tools/tests",
     "test:cdn": "uv run --locked --project ../tools python ../tools/check_cdn.py --browser",
     "test:signup": "uv run --locked --project ../tools python ../tools/check_signup.py",
-    "test:signup:dev": "playwright test --config playwright.dev.config.ts",
+    "test:signup:dev": "playwright test --config playwright.dev.config.ts signup.spec.ts",
     "predev": "npm run images:prepare",
     "dev": "nuxt dev --host 0.0.0.0",
     "pregenerate": "npm run images:prepare",
@@ -20,10 +20,13 @@
     "postinstall": "nuxt prepare",
     "pretypecheck": "npm run images:prepare",
     "typecheck": "nuxt typecheck",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:commerce:dev": "playwright test --config playwright.dev.config.ts commerce.spec.ts",
+    "test:commerce:service": "playwright test --config playwright.service.config.ts"
   },
   "dependencies": {
     "nuxt": "4.6.4",
+    "parse5": "8.0.0",
     "vue": "3.5.44",
     "vue-router": "5.4.0"
   },

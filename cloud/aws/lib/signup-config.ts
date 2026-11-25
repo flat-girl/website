@@ -18,11 +18,11 @@ export function signupConfig(value: any): SignupConfig {
   for (const env of ['beta', 'production'] as const) {
     const item = value[env]
     if (!item || Object.keys(item).sort().join(',') !== 'burstLimit,enabled,listId,rateLimit' ||
-        typeof item.enabled !== 'boolean' || item.listId !== (env === 'beta' ? 5 : 4) ||
+        typeof item.enabled !== 'boolean' || item.listId !== (env === 'beta' ? 10 : 9) ||
         !Number.isFinite(item.rateLimit) || item.rateLimit <= 0 || item.rateLimit > 100 ||
         !Number.isSafeInteger(item.burstLimit) || item.burstLimit < 1 || item.burstLimit > 100 ||
         (item.enabled && !value.turnstileSiteKey))
-      throw new Error('Signup requires beta list 5, production list 4, bounded throttles and a real site key before enabling.')
+      throw new Error('Signup requires beta list 10, production list 9, bounded throttles and a real site key before enabling.')
   }
   return value
 }

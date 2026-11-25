@@ -15,7 +15,8 @@ release archives, processed variants, beta, production, and admin. Four CloudFro
 distributions expose the two public-site environments, processed images, and admin. Production and
 images do not depend on beta. Basic Auth protects beta's site files; shared
 images are public. Signup uses separate API/Lambda settings with shared provider
-keys, beta list 5, and production list 4. Both signup services are enabled.
+keys. As of November 16, the local signup configuration targets betaSoldOutList 10
+and production SoldOutList 9; both list changes still need deployment. Both signup services were previously enabled.
 
 ## Local checks
 

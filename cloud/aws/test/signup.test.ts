@@ -9,8 +9,8 @@ import { Signup } from '../lib/signup-stack.js'
 import { signupConfig, signupParameters } from '../lib/signup-config.js'
 const { createHandler, createSecretLoader } = createRequire(import.meta.url)('../lambda/signup.cjs')
 const cfg = signupConfig({ turnstileSiteKey: '0xTestSiteKeyForSynthesis',
-  beta: { enabled: true, listId: 5, rateLimit: 1, burstLimit: 2 },
-  production: { enabled: true, listId: 4, rateLimit: 3, burstLimit: 5 } })
+  beta: { enabled: true, listId: 10, rateLimit: 1, burstLimit: 2 },
+  production: { enabled: true, listId: 9, rateLimit: 3, burstLimit: 5 } })
 const p = config({ account: '111111111111', region: 'us-east-1', hostedZoneId: 'ZEXAMPLE', domain: 'flatgirl.net', operatorPrincipalArn: null, betaEnabled: true, productionNoindex: true })
 const accepted = { accepted: true }
 const contact = (extra = {}) => ({ emailBlacklisted: false, listIds: [], ...extra })
@@ -23,7 +23,7 @@ function event(body: any = {}) {
 function fixture(responses: any[], settings: any = {}, extra: any = {}) {
   const calls: any[] = [], logs: any[] = [], notifications: string[] = []
   let secretCalls = 0
-  const handler = createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 4, ...settings }, {
+  const handler = createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 9, ...settings }, {
     secrets: async () => { secretCalls++; return { turnstile: 'private-turnstile', brevo: 'private-brevo' } },
     fetch: async (url: string, options: any) => {
       calls.push({ url, ...options })
@@ -42,18 +42,18 @@ function fixture(responses: any[], settings: any = {}, extra: any = {}) {
 test('new signup validates server-side and creates only the configured membership', async () => {
   const f = fixture([reply(200, tokenReply), reply(404), reply(201, { id: 22 })])
   assert.deepEqual(JSON.parse((await f.handler(event())).body), accepted)
-  assert.deepEqual(JSON.parse(f.calls[2].body), { email: 'reader+launch@example.com', listIds: [4], updateEnabled: false })
+  assert.deepEqual(JSON.parse(f.calls[2].body), { email: 'reader+launch@example.com', listIds: [9], updateEnabled: false })
   assert.equal(f.calls[0].redirect, 'error')
   assert.ok(f.calls.every(c => c.signal instanceof AbortSignal))
   assert.equal(f.calls.length, 3)
   assert.deepEqual(f.notifications, ['reader+launch@example.com'])
 })
 
-test('beta shares keys but targets list 5 and accepts only its hostname/origin', async () => {
-  const f = fixture([reply(200, { ...tokenReply, hostname: 'beta.flatgirl.net' }), reply(404), reply(201)], { origin: 'https://beta.flatgirl.net', listId: 5 })
+test('beta shares keys but targets list 10 and accepts only its hostname/origin', async () => {
+  const f = fixture([reply(200, { ...tokenReply, hostname: 'beta.flatgirl.net' }), reply(404), reply(201)], { origin: 'https://beta.flatgirl.net', listId: 10 })
   const request = event(); request.headers.origin = 'https://beta.flatgirl.net'
   assert.equal((await f.handler(request)).statusCode, 200)
-  assert.deepEqual(JSON.parse(f.calls[2].body).listIds, [5])
+  assert.deepEqual(JSON.parse(f.calls[2].body).listIds, [10])
   assert.equal(f.calls[1].headers['api-key'], 'private-brevo')
 })
 
@@ -76,7 +76,7 @@ test('invalid requests never read secrets or call providers', async () => {
 })
 
 test('valid base64 and mixed-case headers are accepted', async () => {
-  const f = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [4] }))])
+  const f = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [9] }))])
   const request = event()
   request.body = Buffer.from(request.body).toString('base64'); request.isBase64Encoded = true
   const mixed = { ...request, headers: { Origin: 'https://flatgirl.net', 'Content-Type': 'application/json; charset=utf-8' } }
@@ -96,7 +96,7 @@ test('rejected, expired/replayed and mismatched Turnstile responses never contac
 })
 
 test('duplicates and global/list suppression are identical no-write acceptances', async () => {
-  for (const state of [contact({ listIds: [4] }), contact({ emailBlacklisted: true }), contact({ listUnsubscribed: [4] })]) {
+  for (const state of [contact({ listIds: [9] }), contact({ emailBlacklisted: true }), contact({ listUnsubscribed: [9] })]) {
     const f = fixture([reply(200, tokenReply), reply(200, state)])
     const response = await f.handler(event())
     assert.equal(response.statusCode, 200); assert.deepEqual(JSON.parse(response.body), accepted)
@@ -106,10 +106,10 @@ test('duplicates and global/list suppression are identical no-write acceptances'
 })
 
 test('existing eligible contact gets a list-only update, preserving attributes and suppression flags', async () => {
-  const f = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [5, 42], attributes: { NAME: 'Reader' } })), reply(204)])
+  const f = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [10, 42], attributes: { NAME: 'Reader' } })), reply(204)])
   assert.equal((await f.handler(event())).statusCode, 200)
   assert.equal(f.calls[2].method, 'PUT')
-  assert.deepEqual(JSON.parse(f.calls[2].body), { listIds: [4] })
+  assert.deepEqual(JSON.parse(f.calls[2].body), { listIds: [9] })
   assert.equal(f.notifications.length, 1)
 })
 
@@ -140,7 +140,7 @@ test('provider errors and ambiguous writes fail without automatic write replay o
   }
   const lookupFailure = fixture([reply(200, tokenReply), reply(429)])
   assert.equal((await lookupFailure.handler(event())).statusCode, 503); assert.equal(lookupFailure.calls.length, 2)
-  const retry = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [4] }))])
+  const retry = fixture([reply(200, tokenReply), reply(200, contact({ listIds: [9] }))])
   assert.equal((await retry.handler(event())).statusCode, 200)
 })
 
@@ -193,7 +193,7 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
   for (const env of ['beta', 'production'] as const) {
     const template = Template.fromStack(signupStacks[env])
     template.hasResourceProperties('AWS::Lambda::Function', { Runtime: 'nodejs24.x', Timeout: 15,
-      Environment: { Variables: { SIGNUP_ENABLED: 'true', BREVO_LIST_ID: String(env === 'beta' ? 5 : 4),
+      Environment: { Variables: { SIGNUP_ENABLED: 'true', BREVO_LIST_ID: String(env === 'beta' ? 10 : 9),
         ALLOWED_ORIGIN: env === 'beta' ? 'https://beta.flatgirl.net' : 'https://flatgirl.net',
         BREVO_PARAMETER: signupParameters.brevo, TURNSTILE_PARAMETER: signupParameters.turnstile } } })
     template.hasResourceProperties('AWS::ApiGatewayV2::Api', { DisableExecuteApiEndpoint: true, ProtocolType: 'HTTP',
@@ -270,7 +270,7 @@ test('signup stacks share secret paths, isolate origins/lists, and retain hostin
     }
   }
   app.synth() // Also exercises the 51,200-byte inline-template limit.
-  assert.throws(() => signupConfig({ ...cfg, beta: { ...cfg.beta, listId: 4 } }))
+  assert.throws(() => signupConfig({ ...cfg, beta: { ...cfg.beta, listId: 9 } }))
   assert.throws(() => signupConfig({ ...cfg, production: { ...cfg.production, listId: 6 } }))
   assert.throws(() => signupConfig({ ...cfg, turnstileSiteKey: '1x00000000000000000000AA' }))
 })

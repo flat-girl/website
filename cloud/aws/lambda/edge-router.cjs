@@ -2,6 +2,7 @@ const { createHash, timingSafeEqual } = require('node:crypto')
 const publicFiles = ['index.html', '200.html', '404.html', '_payload.json', 'robots.txt', 'build.json',
   'favicon.ico', 'favicon.svg', 'sitemap.xml']
 const authParameter = '/flat-girl/beta/authorization-sha256'
+const policyHandles = ['refund-policy', 'privacy-policy', 'shipping-policy', 'terms-of-service', 'contact-information']
 function credentialReader(deps = {}) {
   let cached, expires = 0
   const now = deps.now || Date.now
@@ -49,14 +50,18 @@ function createHandler(env, deps = {}) {
     const uri = request.uri
     if (uri.includes('..') || /%2e|%2f|%5c/i.test(uri) || uri.includes('/.') || uri.startsWith('/variants/')) return response(404)
     const file = publicFiles.includes(uri.slice(1)) || uri.startsWith('/_nuxt/')
+    const policy = policyHandles.find(handle => uri === `/policies/${handle}` || uri === `/policies/${handle}/`)
+    if (uri.startsWith('/policies/') && !policy && !policyHandles.some(handle =>
+      uri === `/policies/${handle}/index.html` || uri === `/policies/${handle}/_payload.json`)) return response(404)
     const assetLike = file || uri.substring(uri.lastIndexOf('/') + 1).includes('.')
-    const destination = uri === '/index.html' ? '/' : (uri === '/' || assetLike ? uri : '/')
+    const destination = policy ? `/policies/${policy}/` : uri === '/index.html' ? '/' : (uri === '/' || assetLike ? uri : '/')
     const incoming = (request.headers.host?.[0]?.value || '').toLowerCase()
     if (incoming !== host || destination !== uri) {
-      return response(destination !== uri && uri !== '/index.html' ? 302 : 301, {
+      return response(destination !== uri && uri !== '/index.html' && !policy ? 302 : 301, {
         location: [{ key: 'Location', value: `https://${host}${destination}${request.querystring ? '?' + request.querystring : ''}` }],
       })
     }
+    if (policy) request.uri = `/policies/${policy}/index.html`
     return request
   }
 }

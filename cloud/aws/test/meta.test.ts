@@ -326,7 +326,7 @@ test('signup queues Lead after successful Brevo operation, including GPC, withou
   const run = async (responses: any[], failQueue = false) => {
     const calls: any[] = [], events: any[] = []
     const runtime = { config: async () => cfg(), send: async (event: any, _signal: any, email: string) => { assert.equal(email, 'reader@example.com'); events.push(event); if (failQueue) throw Error('queue') }, failure() {} }
-    const handler = signup.createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 4, environment: 'production' }, {
+    const handler = signup.createHandler({ enabled: true, origin: 'https://flatgirl.net', listId: 9, environment: 'production' }, {
       fetch: async (url: string) => { calls.push(url); const [status, data] = responses.shift(); return { status, ok: status < 300, json: async () => data } },
       secrets: async () => ({ turnstile: 'private', brevo: 'private' }), meta: runtime, log() {},
     })
@@ -343,7 +343,7 @@ test('signup queues Lead after successful Brevo operation, including GPC, withou
   }
   const put = await run([verify, [200, { emailBlacklisted: false, listIds: [] }], [204]])
   assert.equal(put.events.length, 1); assert.equal(put.calls.length, 3)
-  for (const data of [{ emailBlacklisted: false, listIds: [4] }, { emailBlacklisted: true, listIds: [] }]) {
+  for (const data of [{ emailBlacklisted: false, listIds: [9] }, { emailBlacklisted: true, listIds: [] }]) {
     const f = await run([verify, [200, data]]); assert.equal(f.events.length, 0); assert.equal(f.calls.length, 2)
   }
   const failed = await run([verify, [404], [500]])

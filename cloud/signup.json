@@ -2,13 +2,13 @@
   "turnstileSiteKey": "0x4AAAAAAF1pFARkZ1vCzj0T",
   "beta": {
     "enabled": true,
-    "listId": 5,
+    "listId": 10,
     "rateLimit": 1,
     "burstLimit": 2
   },
   "production": {
     "enabled": true,
-    "listId": 4,
+    "listId": 9,
     "rateLimit": 3,
     "burstLimit": 5
   }
